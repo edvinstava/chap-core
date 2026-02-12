@@ -1,9 +1,10 @@
+import altair as alt
 import numpy as np
 import pandas as pd
-import altair as alt
-from .dataset_plot import DatasetPlot
 
-alt.renderers.default = "browser"
+from .dataset_plot import DatasetPlot, dataset_plot
+
+alt.renderers.enable("browser")
 
 
 class SeasonPlot(DatasetPlot):
@@ -16,16 +17,16 @@ class SeasonPlot(DatasetPlot):
         means = ((month, group["log1p"].mean()) for month, group in df.groupby("month"))
         min_month, val = min(means, key=lambda x: x[1])
         assert df["month"].max() == 11
-        offset_month = df["month"] - min_month
+        offset_month = df["month"] - min_month  # type: ignore[operator]
         df["seasonal_month"] = offset_month % 12
-        df["season_idx"] = df["year"] + offset_month // 12
+        df["season_idx"] = df["year"] + offset_month // 12  # type: ignore[operator]
         # Create season_idx (season index based on years from start)
         df["season_idx"] = df["season_idx"] - df["season_idx"].min()
         return df
 
-    def plot(self) -> alt.FacetChart:
+    def plot(self) -> alt.FacetChart:  # type: ignore[override]
         df = self.data()
-        return (
+        return (  # type: ignore[no-any-return]
             alt.Chart(df)
             .mark_line(point=False, strokeWidth=2)
             .encode(
@@ -68,6 +69,11 @@ class SeasonCorrelationPlot(DatasetPlot):
         )
 
 
+@dataset_plot(
+    id="seasonal-correlation-plot",
+    name="Seasonal Correlation Bar Plot",
+    description="Bar plot showing correlation between seasonal disease outcomes and climate features.",
+)
 class SeasonCorrelationBarPlot(SeasonCorrelationPlot):
     feature_name = "mean_temperature"  # Example feature to correlate with season_mean
 
@@ -99,9 +105,9 @@ class SeasonCorrelationBarPlot(SeasonCorrelationPlot):
 
         return pd.DataFrame(correlations)
 
-    def plot(self) -> alt.FacetChart:
+    def plot(self) -> alt.FacetChart:  # type: ignore[override]
         df = self.data()
-        return (
+        return (  # type: ignore[no-any-return]
             alt.Chart(df)
             .mark_bar()
             .encode(

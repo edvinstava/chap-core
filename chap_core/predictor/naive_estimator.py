@@ -1,10 +1,12 @@
-import numpy as np
-import json
 import dataclasses
+import json
+
+import numpy as np
 
 from chap_core import get_temp_dir
-from chap_core.spatio_temporal_data.temporal_dataclass import DataSet
+from chap_core.database.model_templates_and_config_tables import ConfiguredModelDB, ModelTemplateDB
 from chap_core.datatypes import Samples
+from chap_core.spatio_temporal_data.temporal_dataclass import DataSet
 
 
 @dataclasses.dataclass
@@ -26,7 +28,7 @@ class NaivePredictor:
                         self.mean_dict[location] if not np.isnan(self.mean_dict[location]) else 0,
                         len(future_data[location]) * num_samples,
                     ).reshape(-1, num_samples),
-                )
+                )  # type: ignore[call-arg]
                 for location in future_data.keys()
             }
         )
@@ -44,6 +46,11 @@ class NaivePredictor:
 
 
 class NaiveEstimator:
+    model_template_db = ModelTemplateDB(id=1, name="naive_model", version="1.0")
+    configured_model_db = ConfiguredModelDB(
+        id="naive_eval", name="naive_configured", model_template_id=1, model_template=model_template_db
+    )
+
     def train(self, data: DataSet) -> NaivePredictor:
         mean_dict = {location: np.nanmean(data[location].disease_cases) for location in data.keys()}
         return NaivePredictor(mean_dict)

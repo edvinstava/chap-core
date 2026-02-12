@@ -43,3 +43,66 @@ Then open http://127.0.0.1:8000 in your browser.
 ## API Documentation
 
 API documentation is auto-generated from Python docstrings using [mkdocstrings](https://mkdocstrings.github.io/). The API reference is in `docs/api/index.md`.
+
+
+## Testing Code Examples (Doctests)
+
+Code examples in documentation are automatically tested using [mktestdocs](https://github.com/koaning/mktestdocs) to ensure they remain correct and up-to-date.
+
+### How it works
+
+- **Python blocks** (` ```python `) are tested with `memory=True`, meaning code blocks within a file share state. Imports and variables defined in earlier blocks are available in later blocks.
+- **Bash blocks** (` ```bash `) are tested as shell commands.
+- **Console blocks** (` ```console `) are NOT tested and should be used for non-testable examples.
+
+### Running doctests
+
+```console
+# Run fast documentation tests
+make test-docs
+
+# Run slow documentation tests (require models, data downloads)
+make test-docs-slow
+
+# Run all documentation tests
+make test-docs-all
+```
+
+### Writing testable examples
+
+**Aim to test as much as possible.** Prefer testable `python` and `bash` blocks over `console` blocks.
+
+1. **Structure code blocks with shared state**: Put imports in earlier blocks, then usage in subsequent blocks that reference those imports.
+
+2. **Use real module paths and class names**: Examples should use actual classes and functions from the codebase.
+
+3. **Use `console` only when necessary**: When a code block cannot be tested (e.g., requires external services, would modify system state, or shows incomplete pseudocode), use `console` instead of `python`/`bash`. **Always add a comment explaining why** the block cannot be tested:
+
+    ````markdown
+    <!-- Cannot test: requires running Docker daemon -->
+    ```console
+    chap eval --model-name docker://my-model --dataset-csv data.csv --output-file eval.nc
+    ```
+    ````
+
+4. **Avoid inline test data**: Use existing fixtures from `conftest.py` files when possible rather than creating new test data inline.
+
+5. **Render code output with markdown-exec**: To show code output in the built docs, add `exec="on" session="<name>" source="above"` to a Python code block. Blocks sharing the same `session` share state (imports, variables), similar to mktestdocs `memory=True`. Use `result="text"` for plain-text output (wraps in a code block), or omit it when the block prints markdown (e.g. `to_markdown()` tables) so it renders natively. Note: mktestdocs skips `exec="on"` blocks since the language tag is no longer plain `python`.
+
+### Skipping files from testing
+
+Some documentation files cannot be tested (e.g., they require Docker, external services, or would run destructive commands). To skip a file, add it to `SKIP_FILES` in `tests/test_documentation.py` with a comment explaining why:
+
+```python
+SKIP_FILES = [
+    # These files have examples requiring external models, docker, or network access
+    "docs/external_models/running_models_in_chap.md",
+    # Files with commands that can't be safely tested
+    "docs/contributor/testing.md",  # Contains pytest, make test-all commands
+]
+```
+
+### Key files
+
+- `tests/test_documentation.py` - Fast documentation tests
+- `tests/test_documentation_slow.py` - Slow documentation tests (marked with `@pytest.mark.slow`)

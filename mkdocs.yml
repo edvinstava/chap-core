@@ -25,7 +25,6 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
-    - navigation.expand
     - navigation.top
     - search.suggest
     - search.highlight
@@ -33,6 +32,7 @@ theme:
 
 plugins:
   - search
+  - markdown-exec
   - mkdocstrings:
       handlers:
         python:
@@ -56,49 +56,109 @@ markdown_extensions:
 docs_dir: docs
 
 nav:
-  - Home: index.md
-  - Modeling App:
+  - Getting Started: index.md
+  - DHIS2 Implementers:
       - Overview: modeling-app/index.md
-      - Installation: modeling-app/installation.md
-      - Using the App: modeling-app/modeling-app.md
-      - Server Deployment: modeling-app/running-chap-on-server.md
+      - Installation:
+          - Installation overview: modeling-app/installation.md
+          - Recommendation for server deployment: modeling-app/running-chap-on-server.md
+          - First-time Setup: modeling-app/fresh-installation.md
+          - Updating to a New Version: modeling-app/upgrading-installation.md
+      - "Using the modeling app":
+          - Getting started: "modeling-app/using-the-modeling-app/getting-started"
+          - Creating an evaluation: "modeling-app/using-the-modeling-app/creating-an-evaluation"
+          - Creating a prediction: "modeling-app/using-the-modeling-app/creating-a-prediction"
+      - Managing models: modeling-app/managing-model-templates.md
+  - For Newcomers:
+      - For newcomers: external_models/newcomer.md
+      - Learning Modelling: external_models/learn_modelling.md
   - Model Developers:
       - Overview: external_models/index.md
       - Getting Started:
-          - For Newcomers: external_models/newcomer.md
           - For Experienced Modellers: external_models/experienced_modeller.md
-          - Learning Modelling: external_models/learn_modelling.md
-      - Building Models:
-          - Chapkit: external_models/chapkit.md
-          - Describe Your Model: external_models/describe_model.md
+
+      - Installing Chap Core:
+          - Prepare for installation: external_models/prepare-for-installation.md
+          - Install Chap Core: chap-cli/chap-core-cli-setup.md
+          - Run minimalist example: chap-cli/minimalist-example.md
+      - Make your model Chap compatible:
           - Train and Predict: external_models/train_and_predict.md
-          - Running Models: external_models/running_models_in_chap.md
+          - Describe Your Model: external_models/describe_model.md
+          - Python-models: external_models/python_models.md
+          - R-models: external_models/r_models.md
+          - Additional Configuration: external_models/additional_configuration.md
+      - Evaluate models with Chap:
+          - Evaluating Models: external_models/running_models_in_chap.md
       - Integration:
+          - Chapkit: external_models/chapkit.md
+          - Data Formats: external_models/data_formats.md
           - DHIS2 Connection: external_models/chap-dhis2-connection.md
           - Supporting Functionality: external_models/supporting_functionality.md
           - Evaluation Examples: external_models/chap_evaluate_examples.md
           - Side by Side Comparison: external_models/side_by_side_comparison.md
-  - CLI:
-      - Overview: chap-cli/index.md
-      - Setup: chap-cli/chap-core-cli-setup.md
-      - Evaluation Workflow: chap-cli/evaluation-workflow.md
-      - evaluate2 Reference: chap-cli/evaluate2-reference.md
+          - Model Explainability: external_models/model_explainability.md
+      - CLI:
+          - Overview: chap-cli/index.md
+          - Evaluation Workflow: chap-cli/evaluation-workflow.md
+          - eval Reference: chap-cli/eval-reference.md
+
+  #- Modeling App:
+  #  - '!import https://github.com/dhis2-chap/chap-frontend?branch=main&docs_dir=apps/modeling-app/docs'
   - Contributors:
       - Overview: contributor/index.md
-      - Getting Started: contributor/getting_started.md
-      - Setup: contributor/chap-contributor-setup.md
-      - Windows Setup: contributor/windows_contributors.md
-      - Code Overview: contributor/code_overview.md
-      - Vocabulary: contributor/vocabulary.md
-      - Testing: contributor/testing.md
-      - Database Migrations: contributor/database_migrations.md
-      - Documentation: contributor/writing_building_documentation.md
-      - Development Tools: contributor/development_tools.md
-      - Evaluation Abstraction: contributor/evaluation_abstraction.md
-      - Preference Learning: contributor/preference_learning.md
-  - Web API:
-      - Overview: webapi/index.md
-      - Developer Guide: webapi/developer.md
-      - Docker Compose: webapi/docker-compose-doc.md
-  - API Reference: api/index.md
-  - Changelog: changelog.md
+      - Contributors:
+          - Getting Started: contributor/getting_started.md
+          - Setup: contributor/chap-contributor-setup.md
+          - Windows Setup: contributor/windows_contributors.md
+          - Code Overview: contributor/code_overview.md
+          - MLproject Configuration: contributor/mlproject_configuration.md
+          - Vocabulary: contributor/vocabulary.md
+          - Testing: contributor/testing.md
+          - Database Migrations: contributor/database_migrations.md
+          - Documentation: contributor/writing_building_documentation.md
+          - Development Tools: contributor/development_tools.md
+          - Evaluation Pipeline: contributor/evaluation_pipeline.md
+          - Evaluation Walkthrough: contributor/evaluation_walkthrough.md
+          - Evaluation Abstraction: contributor/evaluation_abstraction.md
+          - Preference Learning: contributor/preference_learning.md
+      - Web API:
+          - Overview: webapi/index.md
+          - Developer Guide: webapi/developer.md
+          - Docker Compose: webapi/docker-compose-doc.md
+          - Service Registration: webapi/service-registration.md
+      - API Reference: api/index.md
+      - Changelog: changelog.md
+  - Modeling Webinar Series:
+      - "Overview": kigali-workshop/kigali-webinar-series/index.md
+      - "Session 1": kigali-workshop/kigali-webinar-series/session-1/index.md
+      - "Session 2":
+          - kigali-workshop/kigali-webinar-series/session-2/index.md
+          - kigali-workshop/kigali-webinar-series/session-2/terminal.md
+          - kigali-workshop/kigali-webinar-series/session-2/git-github.md
+          - kigali-workshop/kigali-webinar-series/session-2/virtual-environments.md
+          - kigali-workshop/kigali-webinar-series/session-2/homework.md
+      - "Session 3":
+          - kigali-workshop/kigali-webinar-series/session-3/index.md
+          - kigali-workshop/kigali-webinar-series/session-3/install-chap.md
+          - kigali-workshop/kigali-webinar-series/session-3/fork-example.md
+          - kigali-workshop/kigali-webinar-series/session-3/homework.md
+      - "Session 4": kigali-workshop/kigali-webinar-series/session-4/index.md
+      - "Session 5": kigali-workshop/kigali-webinar-series/session-5/index.md
+      - "Session 6": kigali-workshop/kigali-webinar-series/session-6/index.md
+  - Kigali Workshop Material:
+      - Overview: kigali-workshop/kigali-workshop-material/index.md
+      - Pre-session 11 Feb: kigali-workshop/kigali-workshop-material/11_feb_presession.md
+      - Monday Morning 23 Feb: kigali-workshop/kigali-workshop-material/monday-morning.md
+      - Monday Afternoon 23 Feb: kigali-workshop/kigali-workshop-material/monday-afternoon.md
+      - Tuesday Morning 24 Feb: kigali-workshop/kigali-workshop-material/tuesday-morning.md
+      - Tuesday Afternoon 24 Feb: kigali-workshop/kigali-workshop-material/tuesday-afternoon.md
+      - Progressive Effects Walkthrough: kigali-workshop/kigali-workshop-material/progressive_effects_walkthrough.md
+      - Multi-Region Strategies Walkthrough: kigali-workshop/kigali-workshop-material/multi_region_walkthrough.md
+      - Location Specificity Overview: kigali-workshop/kigali-workshop-material/location_specificity_overview.md
+      - Interaction Effects: kigali-workshop/kigali-workshop-material/interaction_effects.md
+      - Wednesday Morning 25 Feb: kigali-workshop/kigali-workshop-material/wednesday-morning.md
+      - Wednesday Afternoon 25 Feb: kigali-workshop/kigali-workshop-material/wednesday-afternoon.md
+      - Thursday Morning 26 Feb: kigali-workshop/kigali-workshop-material/thursday-morning.md
+      - Thursday Afternoon 26 Feb: kigali-workshop/kigali-workshop-material/thursday-afternoon.md
+      - Friday Morning 27 Feb: kigali-workshop/kigali-workshop-material/friday-morning.md
+      - Friday Afternoon 27 Feb: kigali-workshop/kigali-workshop-material/friday-afternoon.md

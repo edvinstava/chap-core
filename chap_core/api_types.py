@@ -1,10 +1,20 @@
-from typing import Any, Optional, Literal
-import numpy as np
+from typing import Any, Literal, Optional, Union
 
+import numpy as np
 from pydantic import BaseModel, Field
 from pydantic_geojson import (
     FeatureCollectionModel as _FeatureCollectionModel,
+)
+from pydantic_geojson import (
     FeatureModel as _FeatureModel,
+)
+from pydantic_geojson import (
+    LineStringModel,
+    MultiLineStringModel,
+    MultiPointModel,
+    MultiPolygonModel,
+    PointModel,
+    PolygonModel,
 )
 
 from chap_core.database.base_tables import DBModel
@@ -12,11 +22,14 @@ from chap_core.database.base_tables import DBModel
 
 class FeatureModel(_FeatureModel):
     id: Optional[str] = None
-    properties: Optional[dict[str, Any]] = Field(default_factory=dict)
+    properties: Optional[dict[str, Any]] = Field(default_factory=dict)  # type: ignore[assignment]
+    geometry: Union[
+        PointModel, MultiPointModel, LineStringModel, MultiLineStringModel, PolygonModel, MultiPolygonModel, None
+    ] = None
 
 
 class FeatureCollectionModel(_FeatureCollectionModel):
-    features: list[FeatureModel]
+    features: list[FeatureModel]  # type: ignore[assignment]
 
 
 class DataElement(BaseModel):
@@ -115,18 +128,3 @@ class EvaluationResponse(BaseModel):
 
 class PeriodObservation(BaseModel):
     time_period: str
-
-
-# class Geometry:
-#     type: str
-#     coordinates: list[list[float]]
-#
-#
-# class GeoJSONObject(BaseModel):
-#     id: str
-#     geometry: dict
-#
-#
-# class GeoJSON(BaseModel):
-#     type: str
-#     features: list[dict]

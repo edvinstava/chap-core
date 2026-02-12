@@ -28,19 +28,31 @@ SKIP_FILES = [
     "docs/external_models/surplus_after_refactoring.md",  # Requires gluonts, downloads data
     # Files with commands that can't be safely tested (would run full test suite, etc.)
     "docs/contributor/testing.md",  # Contains pytest, make test-all commands
+    # Explanatory guides with pseudo-code snippets (undefined variables like model, train_fn, etc.)
+    "docs/external_models/model_explainability.md",
+    # Slow bash tests moved to test_documentation_slow.py
+    "docs/feature_tutorials/extended_predictor.md",
+    "docs/chap-cli/evaluation-workflow.md",
+    # Workshop tutorials (instructional content, not testable code)
+    # Note: 11_feb_presession.md is tested in test_documentation_slow.py
+    "docs/kigali-workshop",
 ]
 
 
 def get_doc_files():
     """Get all markdown files in docs/ that are not in SKIP_FILES."""
     all_files = list(pathlib.Path("docs").glob("**/*.md"))
-    return [f for f in all_files if str(f) not in SKIP_FILES]
+    return [f for f in all_files if not any(str(f).startswith(skip) for skip in SKIP_FILES)]
 
 
 @pytest.mark.parametrize("fpath", get_doc_files(), ids=str)
 def test_docs_python(fpath):
-    """Test Python code blocks in documentation."""
-    check_md_file(fpath=fpath, lang="python")
+    """Test Python code blocks in documentation.
+
+    Uses memory=True so code blocks within a file share state (imports, variables).
+    This allows documentation to have one import block followed by usage examples.
+    """
+    check_md_file(fpath=fpath, lang="python", memory=True)
 
 
 @pytest.mark.parametrize("fpath", get_doc_files(), ids=str)

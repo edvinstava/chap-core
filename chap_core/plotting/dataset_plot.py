@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
+from typing import Optional
+
 import altair as alt
 import numpy as np
 import pandas as pd
-
 from altair import HConcatChart
 from pydantic import BaseModel
 
@@ -13,6 +14,9 @@ alt.data_transformers.enable("vegafusion")
 
 
 # alt.renderers.enable('notebook')
+
+# Global registry for dataset plots
+_dataset_plots_registry: dict[str, type["DatasetPlot"]] = {}
 
 
 def temperature_transform(x):
@@ -28,6 +32,10 @@ def temperature_transform(x):
 
 
 class DatasetPlot(ABC):
+    id: str = ""
+    name: str = ""
+    description: str = ""
+
     def __init__(self, df: pd.DataFrame, geojson=None):
         self._df = df
         self._geojson = geojson
@@ -48,19 +56,19 @@ class DatasetPlot(ABC):
         return cls(df, geojson=geojson)
 
     def _get_feature_names(self) -> list:
-        return [name for name in self._get_colnames() if name not in ("log1p", "log1p", "population")]
+        return [name for name in self._get_colnames() if name not in ("log1p", "population")]
 
-    def _get_colnames(self) -> filter:
-        colnames = filter(
-            lambda name: name not in ("disease_cases", "location", "time_period") and not name.startswith("Unnamed"),
-            self._df.columns,
+    def _get_colnames(self) -> list[str]:
+        colnames = list(
+            filter(
+                lambda name: self._df[name].dtype.name in ("float64", "int64", "bool", "int32", "float32"),
+                filter(
+                    lambda name: name not in ("disease_cases", "location", "time_period")
+                    and not name.startswith("Unnamed"),
+                    self._df.columns,
+                ),
+            )
         )
-        colnames = filter(
-            lambda name: self._df[name].dtype.name in ("float64", "int64", "bool", "int32", "float32"), colnames
-        )
-        print(self._df.columns)
-        colnames = list(colnames)
-        print(colnames)
         return colnames
 
     def plot_spec(self):
@@ -73,6 +81,51 @@ class DatasetPlot(ABC):
     def data(self): ...
 
 
+def dataset_plot(id: str, name: str, description: str = ""):
+    """Decorator to register a dataset plot class."""
+
+    def decorator(cls: type[DatasetPlot]) -> type[DatasetPlot]:
+        cls.id = id
+        cls.name = name
+        cls.description = description
+        _dataset_plots_registry[id] = cls
+        return cls
+
+    return decorator
+
+
+def get_dataset_plots_registry() -> dict[str, type[DatasetPlot]]:
+    """Get the registry of all registered dataset plots."""
+    return _dataset_plots_registry.copy()
+
+
+def get_dataset_plot(plot_id: str) -> Optional[type[DatasetPlot]]:
+    """Get a specific dataset plot class by ID."""
+    return _dataset_plots_registry.get(plot_id)
+
+
+def list_dataset_plots() -> list[dict]:
+    """List all registered dataset plots with their metadata."""
+    return [
+        {"id": cls.id, "name": cls.name, "description": cls.description} for cls in _dataset_plots_registry.values()
+    ]
+
+
+def create_plot_from_dataset(plot_id: str, dataset):
+    """Create a plot spec from a dataset model using the registry."""
+    plot_cls = get_dataset_plot(plot_id)
+    if plot_cls is None:
+        available = ", ".join(_dataset_plots_registry.keys())
+        raise ValueError(f"Unknown plot type: {plot_id}. Available: {available}")
+    plotter = plot_cls.from_dataset_model(dataset)
+    return plotter.plot_spec()
+
+
+@dataset_plot(
+    id="disease-cases-map",
+    name="Disease Cases Map",
+    description="Choropleth map showing mean disease cases or incidence rate by location.",
+)
 class DiseaseCasesMap(DatasetPlot):
     plot_variable: str = "disease_cases"
 
@@ -126,6 +179,11 @@ class DiseaseCasesMap(DatasetPlot):
         return chart
 
 
+@dataset_plot(
+    id="standardized-feature-plot",
+    name="Standardized Feature Plot",
+    description="Standardized features over time for different locations with interactive selection.",
+)
 class StandardizedFeaturePlot(DatasetPlot):
     """
     This plot shows standardized(zero mean, unit variance) features over time for different locations.
@@ -133,13 +191,13 @@ class StandardizedFeaturePlot(DatasetPlot):
     This shows how different features correlate over time and location.
     """
 
-    def _standardize(self, col: np.array) -> np.array:
+    def _standardize(self, col: np.ndarray) -> np.ndarray:
         # Handle NaN values properly
         mean_val = np.nanmean(col)
         std_val = np.nanstd(col)
         if std_val == 0:
-            return col - mean_val  # Return zero-centered values when std is 0
-        return (col - mean_val) / std_val
+            return col - mean_val  # type: ignore[no-any-return]
+        return (col - mean_val) / std_val  # type: ignore[no-any-return]
 
     def data(self) -> pd.DataFrame:
         df = self._df.copy()
@@ -159,7 +217,7 @@ class StandardizedFeaturePlot(DatasetPlot):
         for colname in colnames:
             if colname in df.columns:
                 new_df = base_df.copy()
-                new_df["value"] = self._standardize(df[colname].values)
+                new_df["value"] = self._standardize(df[colname].values)  # type: ignore[arg-type]
                 new_df["feature"] = colname
                 dfs.append(new_df)
 
@@ -169,7 +227,7 @@ class StandardizedFeaturePlot(DatasetPlot):
             # Return empty dataframe with correct structure
             return pd.DataFrame(columns=["time_period", "location", "value", "feature"])
 
-    def plot(self) -> HConcatChart:
+    def plot(self) -> HConcatChart:  # type: ignore[override]
         data = self.data()
 
         # Filter data based on selected features if specified
@@ -206,7 +264,7 @@ class StandardizedFeaturePlot(DatasetPlot):
             .facet(facet=alt.Facet("location:N", title="Location"), columns=3)
             .resolve_scale(y="shared")
         )
-        return (
+        return (  # type: ignore[no-any-return]
             alt.hconcat(legend_chart, main_chart)
             .resolve_legend(color="independent")
             .properties(title="Multiple Feature Selection (Click legend items to toggle)")
@@ -248,3 +306,11 @@ def test_temperature_transform():
     )
     chart.save("temperature_transform.html")
     chart.save("temperature_transform.png")
+
+
+def _discover_plots():
+    """Import plot modules to trigger decorator registration."""
+    from chap_core.plotting import season_plot  # noqa: F401
+
+
+_discover_plots()

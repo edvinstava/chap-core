@@ -7,6 +7,7 @@ import importlib
 import subprocess
 
 import pytest
+from mktestdocs import check_md_file
 
 from tests.fixtures.doc_test_data import (
     CHAPKIT_REQUIRED_COLUMNS,
@@ -116,3 +117,27 @@ class TestDatasetExamples:
         from chap_core.file_io.example_data_set import datasets
 
         assert "ISIMIP_dengue_harmonized" in datasets
+
+
+@pytest.mark.slow
+class TestSlowDocumentationBash:
+    """Slow bash documentation tests that run actual CLI commands."""
+
+    SLOW_DOC_FILES = [
+        "docs/feature_tutorials/extended_predictor.md",
+        "docs/chap-cli/evaluation-workflow.md",
+        "docs/kigali-workshop/kigali-workshop-material/11_feb_presession.md",
+    ]
+
+    @pytest.mark.parametrize("fpath", SLOW_DOC_FILES)
+    def test_slow_docs_bash(self, fpath):
+        """Test bash code blocks in slow documentation files."""
+        check_md_file(fpath=fpath, lang="bash")
+
+    @pytest.mark.parametrize(
+        "fpath",
+        ["docs/kigali-workshop/kigali-workshop-material/11_feb_presession.md"],
+    )
+    def test_slow_docs_python(self, fpath):
+        """Test Python code blocks in slow documentation files."""
+        check_md_file(fpath=fpath, lang="python", memory=True)
