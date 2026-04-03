@@ -6,14 +6,15 @@ and measuring the impact on forecast outputs.
 """
 
 import logging
-from typing import Callable, List, Optional, Dict, Any
+from typing import Any, Callable, Dict, List, Optional
+
 import numpy as np
 
 from .types import (
+    ExplanationMethod,
     FeatureAttribution,
     GlobalExplanation,
     LocalExplanation,
-    ExplanationMethod,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,15 +40,13 @@ class PerturbationExplainer:
     ) -> GlobalExplanation:
         baseline_pred = self.predict_fn(X)
         baseline_mean = np.mean(baseline_pred)
-        
+
         importances = []
         for feature in self.feature_names:
             if feature not in X:
                 continue
-            
-            feature_importance = self._permutation_importance(
-                X, feature, baseline_mean
-            )
+
+            feature_importance = self._permutation_importance(X, feature, baseline_mean)
             importances.append(
                 FeatureAttribution(
                     feature_name=feature,
@@ -55,17 +54,17 @@ class PerturbationExplainer:
                     direction="positive" if feature_importance > 0 else "negative",
                 )
             )
-        
+
         importances.sort(key=lambda x: abs(x.importance), reverse=True)
         top_features = importances[:top_k]
-        
+
         if len(importances) > 1:
             imp_values = [abs(f.importance) for f in importances]
             stability = 1.0 - (np.std(imp_values) / (np.mean(imp_values) + 1e-10))
             stability = max(0.0, min(1.0, stability))
         else:
             stability = 1.0
-        
+
         return GlobalExplanation(
             method=ExplanationMethod.PERMUTATION_IMPORTANCE,
             top_features=top_features,
@@ -84,16 +83,16 @@ class PerturbationExplainer:
     ) -> LocalExplanation:
         baseline_pred = self.predict_fn(X)
         actual_value = float(baseline_pred[target_idx])
-        
+
         attributions = []
         for feature in self.feature_names:
             if feature not in X:
                 continue
-            
+
             X_occluded = self._occlude_feature(X, feature, target_idx)
             occluded_pred = self.predict_fn(X_occluded)
             delta = actual_value - float(occluded_pred[target_idx])
-            
+
             attributions.append(
                 FeatureAttribution(
                     feature_name=feature,
@@ -102,12 +101,12 @@ class PerturbationExplainer:
                     actual_value=float(X[feature][target_idx]) if target_idx < len(X[feature]) else None,
                 )
             )
-        
+
         attributions.sort(key=lambda x: abs(x.importance), reverse=True)
-        
+
         X_baseline = self._create_baseline(X)
         baseline_value = float(self.predict_fn(X_baseline)[target_idx])
-        
+
         return LocalExplanation(
             prediction_id=prediction_id,
             org_unit=org_unit,
@@ -126,14 +125,14 @@ class PerturbationExplainer:
     ) -> float:
         deltas = []
         original = X[feature].copy()
-        
+
         for _ in range(self.n_repeats):
             X_permuted = X.copy()
             X_permuted[feature] = self.rng.permutation(original)
             permuted_pred = self.predict_fn(X_permuted)
             delta = baseline_mean - np.mean(permuted_pred)
             deltas.append(delta)
-        
+
         return float(np.mean(deltas))
 
     def _occlude_feature(
@@ -165,4 +164,5 @@ def create_predict_fn_from_samples(
             return np.mean(samples, axis=-1)
         else:
             return np.median(samples, axis=-1)
+
     return predict_fn

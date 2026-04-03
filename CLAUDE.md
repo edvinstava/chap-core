@@ -13,6 +13,12 @@
 11. When writing tests, avoid creating new test data inline. Use existing fixtures from conftest.py files whenever possible. Only create new fixtures in conftest.py if testing edge cases not covered by existing fixtures. This improves test maintainability and reduces duplication.
 12. Never access private variables
 13. When creating Jira issues, always set at least one component
+14. XAI work: Follow best-practice XAI patterns (fallbacks when shap/lime not installed,
+    flag_modified for JSON mutations, use get_status_logger() for user-visible progress).
+    Never call shap_values_matrix() directly in endpoints — use explain_local()/explain_global().
+15. Linting: run `.venv/bin/ruff check --fix <file>` (uv/ruff are not on PATH).
+    `make lint` requires uv and will fail — use the venv binary directly.
+16. For XAI bug fixes: do NOT run tests. Lint only.
 
 ## Documentation
 When writing documentation with code examples:

@@ -3,9 +3,9 @@ Database tables for XAI explanations.
 """
 
 import datetime
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Column, JSON
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship
 
 from chap_core.database.base_tables import DBModel

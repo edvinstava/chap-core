@@ -4,14 +4,17 @@ Data types for XAI explanations.
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
 
 class ExplanationMethod(str, Enum):
     PERMUTATION_IMPORTANCE = "permutation_importance"
+    CORRELATION = "correlation"
     OCCLUSION = "occlusion"
+    LIME = "lime"
+    SHAP = "shap"
 
 
 class FeatureAttribution(BaseModel):
