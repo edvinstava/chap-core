@@ -43,6 +43,13 @@ logger = logging.getLogger(__name__)
 worker: CeleryPool[Any] = CeleryPool()
 
 
+def _observations_to_dataset_api(dataclass, observations, fill_missing=False):
+    try:
+        return observations_to_dataset(dataclass, observations, fill_missing=fill_missing)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 class EvaluationEntryRequest(BaseModel):
     backtest_id: int
     quantiles: List[Annotated[float, Field(ge=0, le=1)]]
@@ -97,7 +104,7 @@ def make_dataset(
 def _read_dataset(request):
     feature_names = list({entry.feature_name for entry in request.provided_data})
     dataclass = create_tsdataclass(feature_names)
-    provided_data = observations_to_dataset(dataclass, request.provided_data, fill_missing=True)
+    provided_data = _observations_to_dataset_api(dataclass, request.provided_data, fill_missing=True)
     if "population" in feature_names:
         provided_data = provided_data.interpolate(["population"])
     return feature_names, provided_data
@@ -329,7 +336,7 @@ async def make_prediction(
     request.type = "prediction"
     feature_names = list({entry.feature_name for entry in request.provided_data})
     dataclass = create_tsdataclass(feature_names)
-    provided_data = observations_to_dataset(dataclass, request.provided_data, fill_missing=True)
+    provided_data = _observations_to_dataset_api(dataclass, request.provided_data, fill_missing=True)
     if "population" in feature_names:
         provided_data = provided_data.interpolate(["population"])
     provided_data, rejections = _validate_full_dataset(feature_names, provided_data)

@@ -1,7 +1,7 @@
 services:
   chap:
     volumes:
-      - ./logs:/app/logs
+      - ./logs:/data/logs
       - ./chap_core:/app/chap_core
       - ./alembic:/app/alembic
       - ./config:/app/config
@@ -13,7 +13,7 @@ services:
       context: .
       dockerfile: Dockerfile.inla
     volumes:
-      - ./logs:/app/logs
+      - ./logs:/data/logs
       - ./chap_core:/app/chap_core
       - ./alembic:/app/alembic
   postgres:

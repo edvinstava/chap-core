@@ -31,6 +31,7 @@ class RunnerConfig(BaseModel, extra="forbid"):  # pydantic-specific config to fo
 
 class ModelTemplateConfigCommon(ModelTemplateInformation, extra="forbid"):
     meta_data: ModelTemplateMetaData = ModelTemplateMetaData()
+    provides_native_shap: bool = False
 
 
 # TODO: maybe rename to ModelTemplateYamlConfig

@@ -42,13 +42,38 @@ def test_run_command():
     assert "test2" in output, "Output from command not as expected, output is: " + output
 
 
-def test_uv_runner_prepends_uv_run():
+def test_uv_runner_prepends_uv_run(tmp_path):
     """Test that UvRunner correctly prepends 'uv run' to commands"""
     with patch("chap_core.runners.uv_runner.run_command") as mock_run_command:
         mock_run_command.return_value = "test output"
-        runner = UvRunner(Path("."))
+        runner = UvRunner(tmp_path)
         runner.run_command("python main.py train data.csv model.pkl")
-        mock_run_command.assert_called_once_with("uv run python main.py train data.csv model.pkl", Path("."), env=ANY)
+        mock_run_command.assert_called_once_with(
+            "uv run python main.py train data.csv model.pkl", tmp_path, env=ANY
+        )
+
+
+def test_uv_runner_uses_model_local_uv_cache(tmp_path, monkeypatch):
+    monkeypatch.delenv("UV_CACHE_DIR", raising=False)
+    with patch("chap_core.runners.uv_runner.run_command") as mock_run_command:
+        mock_run_command.return_value = ""
+        runner = UvRunner(tmp_path)
+        runner.run_command("python train.py a b")
+        env = mock_run_command.call_args.kwargs["env"]
+        assert env["UV_CACHE_DIR"] == str((tmp_path / ".uv-cache").resolve())
+        assert env["UV_PROJECT_ENVIRONMENT"] == str(tmp_path / ".venv")
+
+
+def test_uv_runner_respects_uv_cache_dir_env(tmp_path, monkeypatch):
+    shared = tmp_path / "shared-uv-cache"
+    monkeypatch.setenv("UV_CACHE_DIR", str(shared))
+    with patch("chap_core.runners.uv_runner.run_command") as mock_run_command:
+        mock_run_command.return_value = ""
+        runner = UvRunner(tmp_path / "run-a")
+        runner.run_command("python train.py a b")
+        env = mock_run_command.call_args.kwargs["env"]
+        assert env["UV_CACHE_DIR"] == str(shared.resolve())
+        assert shared.is_dir()
 
 
 def test_uv_train_predict_runner_formats_commands():

@@ -7,6 +7,7 @@ Provides endpoints for retrieving and computing explanations for predictions.
 import logging
 import threading
 from functools import partial
+from types import SimpleNamespace
 from typing import Annotated, Any, Dict, List, Optional
 
 import numpy as np
@@ -21,9 +22,9 @@ from chap_core.database.database import SessionWrapper
 from chap_core.database.tables import Prediction
 from chap_core.database.xai_tables import PredictionExplanation, PredictionExplanationRead
 from chap_core.log_config import get_status_logger
-from chap_core.xai.covariate_fallback import resolve_covariate_row
 from chap_core.rest_api.celery_tasks import JOB_NAME_KW, JOB_TYPE_KW, CeleryPool
 from chap_core.rest_api.data_models import JobResponse
+from chap_core.xai.covariate_fallback import resolve_covariate_row
 from chap_core.xai.forecast_matching import find_forecast_row_index as _find_instance_idx
 from chap_core.xai.types import (
     ExplanationMethod,
@@ -179,11 +180,12 @@ _XAI_METHODS: List[XaiMethodRead] = [
     XaiMethodRead(
         id=1,
         name="shap_auto",
-        display_name="SHAP — Auto (best surrogate)",
+        display_name="SHAP \u2014 Auto (best surrogate)",
         description=(
-            "Automatically selects the surrogate model with the best leave-one-out R² "
-            "(from gradient boosting, random forest, extra trees, hist gradient boosting), "
-            "then applies TreeSHAP for exact feature attribution."
+            "Automatically benchmarks all available surrogate models using leave-one-out R\u00b2 "
+            "(XGBoost, LightGBM, Histogram Gradient Boosting, Random Forest, and others), "
+            "tunes the top candidates with Optuna, and applies TreeSHAP for exact, "
+            "additive feature attributions. Recommended for most use cases."
         ),
         method_type="surrogate_shap_auto",
         author="CHAP",
@@ -192,11 +194,12 @@ _XAI_METHODS: List[XaiMethodRead] = [
     ),
     XaiMethodRead(
         id=2,
-        name="shap_gradient_boosting",
-        display_name="SHAP — Gradient Boosting surrogate",
+        name="shap_xgboost",
+        display_name="SHAP \u2014 XGBoost",
         description=(
-            "Fits a GradientBoostingRegressor surrogate on stored predictions, "
-            "then applies TreeSHAP for exact feature attribution."
+            "Fits an XGBoost surrogate on stored predictions, then applies TreeSHAP "
+            "for exact, additive feature attributions. Often the most accurate surrogate "
+            "for structured tabular data."
         ),
         method_type="surrogate_shap",
         author="CHAP",
@@ -205,11 +208,11 @@ _XAI_METHODS: List[XaiMethodRead] = [
     ),
     XaiMethodRead(
         id=3,
-        name="shap_random_forest",
-        display_name="SHAP — Random Forest surrogate",
+        name="shap_lightgbm",
+        display_name="SHAP \u2014 LightGBM",
         description=(
-            "Fits a RandomForestRegressor surrogate on stored predictions, "
-            "then applies TreeSHAP for exact feature attribution."
+            "Fits a LightGBM surrogate on stored predictions, then applies TreeSHAP "
+            "for exact, additive feature attributions. Fast training with strong accuracy."
         ),
         method_type="surrogate_shap",
         author="CHAP",
@@ -218,11 +221,11 @@ _XAI_METHODS: List[XaiMethodRead] = [
     ),
     XaiMethodRead(
         id=4,
-        name="shap_extra_trees",
-        display_name="SHAP — Extra Trees surrogate",
+        name="shap_hist_gradient_boosting",
+        display_name="SHAP \u2014 Histogram Gradient Boosting",
         description=(
-            "Fits an ExtraTreesRegressor surrogate on stored predictions, "
-            "then applies TreeSHAP for exact feature attribution."
+            "Fits a scikit-learn HistGradientBoostingRegressor surrogate on stored predictions, "
+            "then applies TreeSHAP for exact feature attributions. Native missing-value support."
         ),
         method_type="surrogate_shap",
         author="CHAP",
@@ -231,11 +234,11 @@ _XAI_METHODS: List[XaiMethodRead] = [
     ),
     XaiMethodRead(
         id=5,
-        name="shap_hist_gradient_boosting",
-        display_name="SHAP — Hist Gradient Boosting surrogate",
+        name="shap_random_forest",
+        display_name="SHAP \u2014 Random Forest",
         description=(
-            "Fits a HistGradientBoostingRegressor surrogate on stored predictions, "
-            "then applies TreeSHAP for exact feature attribution."
+            "Fits a Random Forest surrogate on stored predictions, "
+            "then applies TreeSHAP for exact, additive feature attributions."
         ),
         method_type="surrogate_shap",
         author="CHAP",
@@ -244,11 +247,51 @@ _XAI_METHODS: List[XaiMethodRead] = [
     ),
     XaiMethodRead(
         id=6,
-        name="lime",
-        display_name="LIME (surrogate)",
+        name="shap_gradient_boosting",
+        display_name="SHAP \u2014 Gradient Boosted Trees (sklearn)",
         description=(
-            "Uses LIME (Local Interpretable Model-agnostic Explanations) on the surrogate "
-            "to produce per-instance feature attributions as a bar chart."
+            "Fits a scikit-learn GradientBoostingRegressor surrogate on stored predictions, "
+            "then applies TreeSHAP for exact feature attributions."
+        ),
+        method_type="surrogate_shap",
+        author="CHAP",
+        archived=False,
+        supported_visualizations=["importance", "waterfall", "beeswarm"],
+    ),
+    XaiMethodRead(
+        id=7,
+        name="shap_extra_trees",
+        display_name="SHAP \u2014 Extra Trees",
+        description=(
+            "Fits an Extra Trees surrogate on stored predictions, "
+            "then applies TreeSHAP for exact, additive feature attributions. "
+            "Faster training than Random Forest with comparable accuracy."
+        ),
+        method_type="surrogate_shap",
+        author="CHAP",
+        archived=False,
+        supported_visualizations=["importance", "waterfall", "beeswarm"],
+    ),
+    XaiMethodRead(
+        id=8,
+        name="lime_auto",
+        display_name="LIME \u2014 Auto (best surrogate)",
+        description=(
+            "Automatically selects the surrogate model with the best leave-one-out R\u00b2, "
+            "then applies LIME for local, per-instance feature attribution."
+        ),
+        method_type="surrogate_lime_auto",
+        author="CHAP",
+        archived=False,
+        supported_visualizations=["importance"],
+    ),
+    XaiMethodRead(
+        id=9,
+        name="lime",
+        display_name="LIME \u2014 Local Explanations",
+        description=(
+            "Applies LIME (Local Interpretable Model-agnostic Explanations) on a surrogate "
+            "to explain individual predictions as a weighted feature bar chart."
         ),
         method_type="surrogate_lime",
         author="CHAP",
@@ -256,9 +299,9 @@ _XAI_METHODS: List[XaiMethodRead] = [
         supported_visualizations=["importance"],
     ),
     XaiMethodRead(
-        id=7,
+        id=10,
         name="occlusion",
-        display_name="Occlusion / Permutation Importance",
+        display_name="Permutation Importance",
         description=(
             "Estimates feature importance by permuting each feature and measuring "
             "the resulting change in predictions."
@@ -269,17 +312,18 @@ _XAI_METHODS: List[XaiMethodRead] = [
         supported_visualizations=["importance"],
     ),
     XaiMethodRead(
-        id=8,
-        name="lime_auto",
-        display_name="LIME \u2014 Auto (best surrogate)",
+        id=11,
+        name="native_shap",
+        display_name="SHAP \u2014 Native (from model)",
         description=(
-            "Automatically selects the surrogate model with the best leave-one-out R\u00b2, "
-            "then applies LIME for local feature attribution."
+            "Uses SHAP values computed directly by the prediction model. "
+            "No surrogate approximation is needed \u2014 these are exact attributions "
+            "from the model itself. Only available when the model provides native SHAP output."
         ),
-        method_type="surrogate_lime_auto",
-        author="CHAP",
+        method_type="native_shap",
+        author="Model",
         archived=False,
-        supported_visualizations=["importance"],
+        supported_visualizations=["importance", "waterfall", "beeswarm"],
     ),
 ]
 
@@ -288,10 +332,12 @@ _XAI_METHOD_BY_NAME = {m.name: m for m in _XAI_METHODS}
 # Maps xai_method name -> surrogate model_type for SurrogateSHAPExplainer
 _METHOD_TO_MODEL_TYPE: Dict[str, str] = {
     "shap_auto": "auto",
+    "shap_xgboost": "xgboost",
+    "shap_lightgbm": "lightgbm",
+    "shap_hist_gradient_boosting": "hist_gradient_boosting",
     "shap_gradient_boosting": "gradient_boosting",
     "shap_random_forest": "random_forest",
     "shap_extra_trees": "extra_trees",
-    "shap_hist_gradient_boosting": "hist_gradient_boosting",
     "lime": "auto",
     "lime_auto": "auto",
 }
@@ -309,12 +355,14 @@ def _camel_quality(quality: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]
     return {
         "rSquared": quality.get("r_squared"),
         "mae": quality.get("mae"),
+        "mape": quality.get("mape"),
         "nSamples": quality.get("n_samples", 0),
         "nUniqueRows": quality.get("n_unique_rows", 0),
         "constantFeatures": quality.get("constant_features", []),
         "imputationRates": quality.get("imputation_rates", {}),
         "removedFeatures": quality.get("removed_features", []),
         "selectedModelType": quality.get("selected_model_type"),
+        "selectedModelDisplayName": quality.get("selected_model_display_name"),
         "nGroups": quality.get("n_groups"),
         "fidelityTier": quality.get("fidelity_tier"),
         "fidelityWarning": quality.get("fidelity_warning"),
@@ -323,6 +371,7 @@ def _camel_quality(quality: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]
         "targetTransformed": quality.get("target_transformed", False),
         "targetTransformMethod": quality.get("target_transform_method"),
         "permutationRemovedFeatures": quality.get("permutation_removed_features", []),
+        "rSquaredTrain": quality.get("r_squared_train"),
     }
 
 
@@ -427,7 +476,7 @@ def _fit_surrogate(
         filter_features,
         tune_hyperparameters,
     )
-    from chap_core.xai.surrogate_model import auto_select_best_model_type
+    from chap_core.xai.surrogate_model import auto_select_best_model_type, select_and_tune_best_model_type
 
     if cache_key is not None:
         cached = _get_cached_surrogate(cache_key)
@@ -449,23 +498,41 @@ def _fit_surrogate(
         "Building surrogate on %d forecasts, features: %s", len(X_filtered), kept_feature_names
     )
 
-    # Step 2: Model selection on filtered features
-    effective_model_type = model_type
-    if model_type == "auto" and len(X_filtered) >= 4:
-        status_logger.info("Selecting best surrogate model (LOO cross-validation)...")
-        top = auto_select_best_model_type(X_filtered, y, groups=groups)
-        effective_model_type = top[0]
-        status_logger.info("Auto-selected surrogate: %s", effective_model_type)
-
     n_rows = len(X_filtered)
-    if n_rows >= 100:
-        n_trials = 30
+    if n_rows >= 200:
+        n_trials = 300
+    elif n_rows >= 100:
+        n_trials = 200
     elif n_rows >= 30:
-        n_trials = 15
+        n_trials = 100
     else:
-        n_trials = max(5, min(12, n_rows // 2))
+        n_trials = max(15, min(40, n_rows))
+
+    # Step 2: Model selection + tuning on filtered features
+    effective_model_type = model_type
     hyperparams: dict = {}
-    if n_rows >= MIN_SAMPLES_FOR_TUNING:
+    if model_type == "auto" and len(X_filtered) >= 4:
+        if n_rows >= MIN_SAMPLES_FOR_TUNING:
+            status_logger.info(
+                "Selecting and tuning best surrogate model (LOO + Optuna, %d trials total)...",
+                n_trials,
+            )
+            try:
+                effective_model_type, hyperparams = select_and_tune_best_model_type(
+                    X_filtered, y, groups=groups, n_trials=n_trials
+                )
+                status_logger.info("Selected surrogate: %s (tuned CV)", effective_model_type)
+                logger.info("Tuned hyperparameters: %s", hyperparams)
+            except Exception as e:
+                logger.warning("Select+tune failed, falling back to LOO selection: %s", e)
+                top = auto_select_best_model_type(X_filtered, y, groups=groups)
+                effective_model_type = top[0]
+                status_logger.info("Auto-selected surrogate: %s (LOO fallback)", effective_model_type)
+        else:
+            top = auto_select_best_model_type(X_filtered, y, groups=groups)
+            effective_model_type = top[0]
+            status_logger.info("Auto-selected surrogate: %s (LOO, dataset too small for tuning)", effective_model_type)
+    elif n_rows >= MIN_SAMPLES_FOR_TUNING:
         try:
             status_logger.info(
                 "Tuning hyperparameters for %s (Optuna, %d trials)...",
@@ -497,15 +564,160 @@ def _fit_surrogate(
 
 
 # ---------------------------------------------------------------------------
+# Native SHAP helpers
+# ---------------------------------------------------------------------------
+
+
+def _has_native_shap(prediction: Any) -> bool:
+    """Return True if the prediction has stored native SHAP values."""
+    return bool((prediction.meta_data or {}).get("native_shap"))
+
+
+def _native_shap_global_response(prediction_id: int, prediction: Any, xai_method: str) -> Optional[GlobalExplanationResponse]:
+    """Return a GlobalExplanationResponse from stored native SHAP metadata, or None."""
+    entry = (prediction.meta_data or {}).get("xai", {}).get("global_by_method", {}).get(xai_method)
+    if entry is None:
+        return None
+    return GlobalExplanationResponse(
+        method=xai_method,
+        top_features=entry.get("topFeatures", []),
+        computed_at=entry.get("computedAt"),
+        n_samples=entry.get("nSamples", 0),
+        stability_score=entry.get("stabilityScore"),
+        available=True,
+        surrogate_quality=None,
+    )
+
+
+def _native_shap_local_response(
+    prediction_id: int,
+    org_unit: str,
+    period: str,
+    output_statistic: str,
+    prediction: Any,
+    session: Any,
+) -> Optional["LocalExplanationResponse"]:
+    """Return a LocalExplanationResponse from stored native SHAP data, or None."""
+    native_shap = (prediction.meta_data or {}).get("native_shap")
+    if not native_shap:
+        return None
+
+    feature_names = native_shap.get("feature_names", [])
+    values = native_shap.get("values", [])
+    shap_rows = [
+        SimpleNamespace(org_unit=v.get("location"), period=str(v.get("time_period", "")))
+        for v in values
+    ]
+    idx = _find_instance_idx(shap_rows, org_unit, period)
+    entry = values[idx] if idx is not None and 0 <= idx < len(values) else None
+
+    if entry is None:
+        return None
+
+    shap_vals = entry["shap_values"]
+    feature_values = entry.get("feature_values") or {}
+    expected_value = float(entry.get("expected_value", native_shap.get("expected_value", 0.0)))
+    actual_prediction = expected_value + float(np.sum(shap_vals))
+    feature_attributions = [
+        {
+            "feature_name": fn,
+            "importance": float(shap_vals[i]),
+            "direction": "positive" if shap_vals[i] >= 0 else "negative",
+            "baseline_value": None,
+            "actual_value": (
+                float(feature_values.get(fn)) if feature_values.get(fn) is not None else None
+            ),
+        }
+        for i, fn in enumerate(feature_names)
+    ]
+    return LocalExplanationResponse(
+        prediction_id=prediction_id,
+        org_unit=org_unit,
+        period=period,
+        method="native_shap",
+        xai_method_name="native_shap",
+        output_statistic=output_statistic,
+        feature_attributions=feature_attributions,
+        baseline_prediction=expected_value,
+        actual_prediction=actual_prediction,
+        surrogate_quality=None,
+        covariate_provenance=None,
+    )
+
+
+def _native_shap_beeswarm(
+    prediction_id: int,
+    output_statistic: str,
+    prediction: Any,
+    dataset: Any,
+) -> Optional[ShapBeeswarmResponse]:
+    """Build a beeswarm response directly from native SHAP metadata."""
+    native_shap = (prediction.meta_data or {}).get("native_shap")
+    if not native_shap:
+        return None
+    feature_names = native_shap.get("feature_names", [])
+    df = dataset.to_pandas()
+    has_location = "location" in df.columns
+    period_col = next((c for c in ["time_period", "period", "date"] if c in df.columns), None)
+    points: List[ShapBeeswarmPoint] = []
+    for entry in native_shap.get("values", []):
+        shap_vals = entry["shap_values"]
+        feature_values = entry.get("feature_values") or {}
+        org_unit = str(entry.get("location", ""))
+        period = str(entry.get("time_period", ""))
+        loc_df = df[df["location"] == org_unit] if has_location else df
+        row, _ = resolve_covariate_row(
+            loc_df,
+            period_col or "",
+            feature_names,
+            period,
+            org_unit,
+            df,
+        )
+        for i, fn in enumerate(feature_names):
+            if fn in feature_values and feature_values.get(fn) is not None:
+                feature_value = float(feature_values[fn])
+            else:
+                raw_value = row.get(fn, 0.0)
+                feature_value = float(raw_value) if raw_value is not None and not pd.isna(raw_value) else 0.0
+            points.append(
+                ShapBeeswarmPoint(
+                    feature_name=fn,
+                    shap_value=float(shap_vals[i]),
+                    feature_value=feature_value,
+                    org_unit=org_unit,
+                    period=period,
+                )
+            )
+    return ShapBeeswarmResponse(
+        prediction_id=prediction_id,
+        output_statistic=output_statistic,
+        feature_names=feature_names,
+        points=points,
+        surrogate_quality=None,
+    )
+
+
+# ---------------------------------------------------------------------------
 # /methods endpoints
 # ---------------------------------------------------------------------------
 
 
 @router.get("/methods", response_model=List[XaiMethodRead], response_model_by_alias=True)
-async def list_xai_methods(include_archived: bool = Query(False, alias="includeArchived")):
-    if include_archived:
-        return _XAI_METHODS
-    return [m for m in _XAI_METHODS if not m.archived]
+async def list_xai_methods(
+    include_archived: bool = Query(False, alias="includeArchived"),
+    prediction_id: Optional[int] = Query(None, alias="predictionId"),
+    session: Session = Depends(get_session),
+):
+    methods = _XAI_METHODS if include_archived else [m for m in _XAI_METHODS if not m.archived]
+
+    if prediction_id is not None:
+        prediction = session.get(Prediction, prediction_id)
+        has_native = prediction is not None and _has_native_shap(prediction)
+        if not has_native:
+            methods = [m for m in methods if m.name != "native_shap"]
+
+    return methods
 
 
 @router.get("/methods/{name}", response_model=XaiMethodRead, response_model_by_alias=True)
@@ -544,6 +756,13 @@ def _run_explanations_task(
     if not forecasts:
         raise ValueError(f"No forecasts found for prediction {prediction_id}")
 
+    # Fast-path: native SHAP — explanations were pre-populated at prediction time
+    if xai_method_name == "native_shap":
+        if not _has_native_shap(prediction):
+            raise ValueError(f"Prediction {prediction_id} has no native SHAP data")
+        status_logger.info("Native SHAP: explanations already stored, skipping surrogate fitting")
+        return
+
     dataset = session.get_dataset(prediction.dataset_id)
 
     try:
@@ -562,9 +781,10 @@ def _run_explanations_task(
 
     if quality:
         status_logger.info(
-            "Surrogate ready: type=%s, LOO-R²=%s, fidelity=%s, n_samples=%d",
+            "Surrogate ready: type=%s, LOO-R²=%s, train-R²=%s, fidelity=%s, n_samples=%d",
             quality.get("selected_model_type"),
             quality.get("r_squared"),
+            quality.get("r_squared_train"),
             quality.get("fidelity_tier"),
             quality.get("n_samples", 0),
         )
@@ -737,6 +957,12 @@ async def compute_global_explanation(
         feature_names = ["disease_cases", "rainfall", "mean_temperature", "population"]
 
     try:
+        if xai_method == "native_shap":
+            resp = _native_shap_global_response(prediction_id, prediction, xai_method)
+            if resp is None:
+                raise HTTPException(status_code=404, detail="No native SHAP data for this prediction")
+            return resp
+
         if xai_method == "occlusion":
             return await _compute_global_occlusion(
                 prediction, forecasts, dataset, feature_names, top_k, session
@@ -891,11 +1117,77 @@ async def list_local_explanations(
     if org_unit:
         query = query.where(PredictionExplanation.org_unit == org_unit)
     if period:
-        query = query.where(PredictionExplanation.period == period)
+        # Resolve horizon-step period (e.g. "202405_1") to the canonical period stored by the
+        # POST endpoint.  Without this, the GET never finds explanations that were stored under
+        # the calendar period derived from the horizon-step id.
+        canonical_period = period
+        if xai_method != "native_shap" and "_" in period and org_unit and prediction.forecasts:
+            idx = _find_instance_idx(prediction.forecasts, org_unit, period)
+            if idx is not None:
+                canonical_period = prediction.forecasts[idx].period
+        query = query.where(PredictionExplanation.period == canonical_period)
     if xai_method:
         query = query.where(PredictionExplanation.method == xai_method)
 
     explanations = session.exec(query).all()
+
+    if not explanations and xai_method == "native_shap":
+        if org_unit and period:
+            resp = _native_shap_local_response(
+                prediction_id=prediction_id,
+                org_unit=org_unit,
+                period=period,
+                output_statistic="median",
+                prediction=prediction,
+                session=session,
+            )
+            if resp is not None:
+                return [resp]
+        native_shap = (prediction.meta_data or {}).get("native_shap")
+        if native_shap:
+            feature_names = native_shap.get("feature_names", [])
+            items: List[LocalExplanationResponse] = []
+            for entry in native_shap.get("values", []):
+                feature_values = entry.get("feature_values") or {}
+                entry_org_unit = str(entry.get("location", ""))
+                entry_period = str(entry.get("time_period", ""))
+                if org_unit and entry_org_unit != org_unit:
+                    continue
+                if period and entry_period != period:
+                    continue
+                shap_vals = entry.get("shap_values", [])
+                expected_value = float(entry.get("expected_value", native_shap.get("expected_value", 0.0)))
+                actual_prediction = expected_value + float(np.sum(shap_vals))
+                items.append(
+                    LocalExplanationResponse(
+                        prediction_id=prediction_id,
+                        org_unit=entry_org_unit,
+                        period=entry_period,
+                        method="native_shap",
+                        xai_method_name="native_shap",
+                        output_statistic="median",
+                        feature_attributions=[
+                            {
+                                "feature_name": fn,
+                                "importance": float(shap_vals[i]),
+                                "direction": "positive" if shap_vals[i] >= 0 else "negative",
+                                "baseline_value": None,
+                                "actual_value": (
+                                    float(feature_values.get(fn))
+                                    if feature_values.get(fn) is not None
+                                    else None
+                                ),
+                            }
+                            for i, fn in enumerate(feature_names)
+                        ],
+                        baseline_prediction=expected_value,
+                        actual_prediction=actual_prediction,
+                        surrogate_quality=None,
+                        covariate_provenance=None,
+                    )
+                )
+            if items:
+                return items
 
     return [_explanation_to_response(exp) for exp in explanations]
 
@@ -910,11 +1202,20 @@ async def compute_local_explanation(
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
 
+    all_forecasts = prediction.forecasts
+    if not all_forecasts:
+        raise HTTPException(status_code=400, detail="No forecasts found for prediction")
+
+    # Resolve canonical stored period: forecasts may store calendar periods like "202406"
+    # while the request arrives with a horizon-step ID like "202405_1".
+    instance_idx = _find_instance_idx(all_forecasts, request.org_unit, request.period)
+    canonical_period = all_forecasts[instance_idx].period if instance_idx is not None else request.period
+
     existing = session.exec(
         select(PredictionExplanation).where(
             PredictionExplanation.prediction_id == prediction_id,
             PredictionExplanation.org_unit == request.org_unit,
-            PredictionExplanation.period == request.period,
+            PredictionExplanation.period == canonical_period,
             PredictionExplanation.method == request.xai_method,
         )
     ).first()
@@ -927,9 +1228,12 @@ async def compute_local_explanation(
     if existing:
         return _explanation_to_response(existing)
 
-    all_forecasts = prediction.forecasts
-    if not all_forecasts:
-        raise HTTPException(status_code=400, detail="No forecasts found for prediction")
+    if instance_idx is None:
+        available = list({f.org_unit for f in all_forecasts})
+        raise HTTPException(
+            status_code=404,
+            detail=f"No forecast found for org_unit={request.org_unit}. Available: {available[:10]}",
+        )
 
     try:
         session_wrapper = SessionWrapper(session=session)
@@ -941,6 +1245,14 @@ async def compute_local_explanation(
             feature_names = []
         if not feature_names:
             feature_names = ["disease_cases", "rainfall", "mean_temperature", "population"]
+
+        if request.xai_method == "native_shap":
+            resp = _native_shap_local_response(
+                prediction_id, request.org_unit, canonical_period, request.output_statistic, prediction, session
+            )
+            if resp is None:
+                raise HTTPException(status_code=404, detail="No native SHAP data for this prediction/period")
+            return resp
 
         if request.xai_method == "occlusion":
             return await _compute_local_occlusion(
@@ -954,15 +1266,6 @@ async def compute_local_explanation(
         )
         cache_key = (prediction_id, request.xai_method, request.output_statistic)
         explainer = _fit_surrogate(X, y, groups, model_type, feature_names, imputation_rates, request.xai_method, cache_key=cache_key)
-
-        # Find instance index for the requested (org_unit, period)
-        instance_idx = _find_instance_idx(all_forecasts, request.org_unit, request.period)
-        if instance_idx is None:
-            available = list({f.org_unit for f in all_forecasts})
-            raise HTTPException(
-                status_code=404,
-                detail=f"No forecast found for org_unit={request.org_unit}. Available: {available[:10]}",
-            )
 
         target_forecast = all_forecasts[instance_idx]
         samples = np.array(target_forecast.values, dtype=float)
@@ -989,7 +1292,7 @@ async def compute_local_explanation(
         explanation = PredictionExplanation(
             prediction_id=prediction_id,
             org_unit=request.org_unit,
-            period=request.period,
+            period=canonical_period,
             method=request.xai_method,
             output_statistic=request.output_statistic,
             params={"top_k": request.top_k},
@@ -1192,6 +1495,12 @@ async def compute_shap_beeswarm(
         feature_names = ["disease_cases", "rainfall", "mean_temperature", "population"]
 
     try:
+        if xai_method == "native_shap":
+            resp = _native_shap_beeswarm(prediction_id, output_statistic, prediction, dataset)
+            if resp is None:
+                raise HTTPException(status_code=404, detail="No native SHAP data for this prediction")
+            return resp
+
         model_type = _METHOD_TO_MODEL_TYPE.get(xai_method, "auto")
         X, y, groups, imputation_rates, _ = _build_surrogate_data(
             forecasts, dataset, feature_names, output_statistic
@@ -1246,6 +1555,73 @@ async def compute_shap_beeswarm(
 # ---------------------------------------------------------------------------
 
 
+def _horizon_summary_from_stored(
+    prediction_id: int,
+    org_unit: str,
+    method: str,
+    output_statistic: str,
+    stored: list,
+) -> HorizonSummaryResponse:
+    """Build a HorizonSummaryResponse from stored PredictionExplanation rows."""
+    stored_sorted = sorted(stored, key=lambda e: e.period)
+    steps: List[HorizonStepSummary] = []
+    all_importances: Dict[str, List[float]] = {}
+    quality = None
+
+    for step_num, exp in enumerate(stored_sorted, start=1):
+        result = exp.result or {}
+        if quality is None:
+            quality = result.get("surrogate_quality")
+        feat_imps: List[HorizonFeatureImportance] = []
+        for attr in result.get("feature_attributions", []):
+            fname = attr.get("feature_name", "")
+            if not fname:
+                continue
+            val = float(attr.get("importance", 0.0))
+            all_importances.setdefault(fname, []).append(val)
+            feat_imps.append(
+                HorizonFeatureImportance(
+                    feature_name=fname,
+                    importance=abs(val),
+                    direction="positive" if val >= 0 else "negative",
+                )
+            )
+        feat_imps.sort(key=lambda x: x.importance, reverse=True)
+        steps.append(
+            HorizonStepSummary(
+                period=exp.period,
+                target_period=exp.period,
+                forecast_step=step_num,
+                feature_importances=feat_imps,
+                actual_prediction=result.get("actual_prediction"),
+            )
+        )
+
+    avg_importance: List[AverageImportance] = []
+    for fname, vals in all_importances.items():
+        mean_signed = float(np.mean(vals)) if vals else 0.0
+        mean_abs = float(np.mean(np.abs(vals))) if vals else 0.0
+        avg_importance.append(
+            AverageImportance(
+                feature_name=fname,
+                mean_abs_importance=mean_abs,
+                mean_signed_importance=mean_signed,
+                direction="positive" if mean_signed >= 0 else "negative",
+            )
+        )
+    avg_importance.sort(key=lambda x: x.mean_abs_importance, reverse=True)
+
+    return HorizonSummaryResponse(
+        prediction_id=prediction_id,
+        org_unit=org_unit,
+        method=method,
+        output_statistic=output_statistic,
+        steps=steps,
+        average_importance=avg_importance,
+        surrogate_quality=quality,
+    )
+
+
 @router.post(
     "/predictions/{predictionId}/local/horizon-summary",
     response_model=HorizonSummaryResponse,
@@ -1277,7 +1653,25 @@ async def compute_horizon_summary(
     if not feature_names:
         feature_names = ["disease_cases", "rainfall", "mean_temperature", "population"]
 
+    # Return from stored explanations when available — avoids re-fitting the surrogate
+    stored_unit = session.exec(
+        select(PredictionExplanation).where(
+            PredictionExplanation.prediction_id == prediction_id,
+            PredictionExplanation.org_unit == org_unit,
+            PredictionExplanation.method == xai_method,
+            PredictionExplanation.output_statistic == output_statistic,
+        )
+    ).all()
+    if stored_unit:
+        return _horizon_summary_from_stored(prediction_id, org_unit, method, output_statistic, stored_unit)
+
     try:
+        if xai_method == "native_shap":
+            raise HTTPException(
+                status_code=404,
+                detail="No native SHAP explanations stored for this org_unit/output_statistic combination",
+            )
+
         model_type = _METHOD_TO_MODEL_TYPE.get(xai_method, "auto")
         X, y, groups, imputation_rates, _ = _build_surrogate_data(
             forecasts, dataset, feature_names, output_statistic

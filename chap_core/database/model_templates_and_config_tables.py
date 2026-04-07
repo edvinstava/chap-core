@@ -41,6 +41,7 @@ class ModelTemplateInformation(SQLModel):
     max_prediction_length: Optional[int] = None
     target: str = "disease_cases"
     allow_free_additional_continuous_covariates: bool = False
+    provides_native_shap: bool = False
 
 
 class ModelTemplateDB(DBModel, ModelTemplateMetaData, ModelTemplateInformation, table=True):

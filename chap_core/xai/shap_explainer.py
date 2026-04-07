@@ -27,9 +27,9 @@ from .surrogate_model import (
     _loo_r2,
     build_shap_explainer,
     build_surrogate_model,
+    get_display_name,
     get_model_info,
     make_loo_model_factory,
-    make_model_factory,
     resolve_model_params,
     tune_surrogate_hyperparameters,
 )
@@ -55,12 +55,14 @@ MIN_SAMPLES_FOR_TARGET_TRANSFORM = 30
 class SurrogateQuality:
     r_squared: Optional[float] = None
     mae: float = 0.0
+    mape: Optional[float] = None
     n_samples: int = 0
     n_unique_rows: int = 0
     constant_features: list[str] = field(default_factory=list)
     imputation_rates: dict[str, float] = field(default_factory=dict)
     removed_features: list[str] = field(default_factory=list)
     selected_model_type: Optional[str] = None
+    selected_model_display_name: Optional[str] = None
     n_groups: Optional[int] = None
     fidelity_tier: str = "good"
     fidelity_warning: Optional[str] = None
@@ -69,19 +71,28 @@ class SurrogateQuality:
     target_transformed: bool = False
     target_transform_method: Optional[str] = None
     permutation_removed_features: list[str] = field(default_factory=list)
+    r_squared_train: Optional[float] = None
 
 
 def _compute_fidelity_tier(r2: Optional[float]) -> tuple[str, Optional[str]]:
-    """Return (fidelity_tier, fidelity_warning) based on LOO-R²."""
-    if r2 is None or r2 < 0.3:
+    """Return (fidelity_tier, fidelity_warning) based on LOO-R².
+
+    Thresholds follow XAI best practice for surrogate fidelity:
+      R² < 0.5  → poor   (surrogate explains less than half the variance)
+      R² < 0.8  → moderate (reasonable but notable unexplained variance remains)
+      R² >= 0.8 → good
+    """
+    if r2 is None or r2 < 0.5:
         return (
             "poor",
-            "Surrogate R\u00b2 is low; SHAP reflects the surrogate and may be a poor match to the real forecast.",
+            "Surrogate R\u00b2 is low (< 0.5); the surrogate does not closely mimic the original model "
+            "and SHAP attributions may not reflect true model behaviour.",
         )
-    if r2 < 0.7:
+    if r2 < 0.8:
         return (
             "moderate",
-            "Surrogate R\u00b2 is moderate; attributions are indicative but should be interpreted with caution.",
+            "Surrogate R\u00b2 is moderate (0.5\u20130.8); attributions are indicative but should be "
+            "interpreted with caution.",
         )
     return "good", None
 
@@ -429,12 +440,8 @@ class SurrogateSHAPExplainer:
         shap_type = get_model_info(model_type).get("shap_type", "tree")
         self._X_train = X_filtered if shap_type == "linear" else None
 
-        base_loo_factory = make_model_factory(
-            model_type, params, random_state=self._random_state, n_samples=n_fit
-        )
-
         def loo_factory():
-            base_model = base_loo_factory()
+            base_model = build_surrogate_model(model_type, params, random_state=self._random_state, n_samples=n_fit)
             if target_transform_method == "log1p":
                 from sklearn.compose import TransformedTargetRegressor
 
@@ -455,9 +462,16 @@ class SurrogateSHAPExplainer:
 
         r2_cv, loo_preds = _loo_r2(X_filtered, y, loo_factory, groups=groups)
         if r2_cv is not None:
-            mae = float(np.mean(np.abs(y - loo_preds)))
+            errors = np.abs(y - loo_preds)
+            mae = float(np.mean(errors))
+            nonzero = np.abs(y) > 1e-8
+            mape: Optional[float] = float(np.mean(errors[nonzero] / np.abs(y[nonzero]))) if nonzero.any() else None
         else:
-            mae = float(np.mean(np.abs(y - self._model.predict(X_filtered))))
+            preds = self._model.predict(X_filtered)
+            errors = np.abs(y - preds)
+            mae = float(np.mean(errors))
+            nonzero = np.abs(y) > 1e-8
+            mape = float(np.mean(errors[nonzero] / np.abs(y[nonzero]))) if nonzero.any() else None
 
         residual_mean: Optional[float] = None
         residual_std: Optional[float] = None
@@ -470,17 +484,25 @@ class SurrogateSHAPExplainer:
         if groups is not None:
             n_groups = int(len(np.unique(groups)))
 
+        from sklearn.metrics import r2_score as _r2_score
+
+        train_preds = self._model.predict(X_filtered)
+        ss_tot_train = float(np.sum((y - np.mean(y)) ** 2))
+        r2_train: Optional[float] = float(_r2_score(y, train_preds)) if ss_tot_train > 0 else None
+
         fidelity_tier, fidelity_warning = _compute_fidelity_tier(r2_cv)
 
         self.quality = SurrogateQuality(
             r_squared=r2_cv,
             mae=mae,
+            mape=mape,
             n_samples=len(X),
             n_unique_rows=unique_rows,
             constant_features=constant_feats,
             imputation_rates=self.imputation_rates,
             removed_features=removed_feats,
             selected_model_type=model_type,
+            selected_model_display_name=get_display_name(model_type),
             n_groups=n_groups,
             fidelity_tier=fidelity_tier,
             fidelity_warning=fidelity_warning,
@@ -489,6 +511,7 @@ class SurrogateSHAPExplainer:
             target_transformed=target_transform_method is not None,
             target_transform_method=target_transform_method,
             permutation_removed_features=perm_removed_feats,
+            r_squared_train=r2_train,
         )
 
     @staticmethod
@@ -672,6 +695,7 @@ class SurrogateSHAPExplainer:
             "target_transformed": self.quality.target_transformed,
             "target_transform_method": self.quality.target_transform_method,
             "permutation_removed_features": self.quality.permutation_removed_features,
+            "r_squared_train": round(self.quality.r_squared_train, 6) if self.quality.r_squared_train is not None else None,
         }
 
     def explain_global(
@@ -813,12 +837,20 @@ class SurrogateSHAPExplainer:
     ) -> list[dict]:
         """Compute SHAP interaction values for a single instance."""
         try:
-            interaction_values = self._shap_explainer.shap_interaction_values(X[instance_idx : instance_idx + 1])[0]
+            X_f = self._filter_X(X)
+            iv_filtered = self._shap_explainer.shap_interaction_values(X_f[instance_idx : instance_idx + 1])[0]
         except Exception as e:
             logger.warning("SHAP interaction values not available: %s", e)
             return []
 
+        # Expand filtered (n_kept, n_kept) interaction matrix back to full feature space.
         n_feats = len(self.feature_names)
+        interaction_values = np.zeros((n_feats, n_feats))
+        keep = self._keep_indices if hasattr(self, "_keep_indices") and self._keep_indices is not None else list(range(n_feats))
+        for out_i, orig_i in enumerate(keep):
+            for out_j, orig_j in enumerate(keep):
+                interaction_values[orig_i, orig_j] = iv_filtered[out_i, out_j]
+
         pairs: list[tuple[float, int, int]] = []
         for i in range(n_feats):
             for j in range(i + 1, n_feats):
@@ -864,7 +896,13 @@ class SurrogateSHAPExplainer:
         try:
             from lime.lime_tabular import LimeTabularExplainer
 
-            effective_n_samples = n_samples if n_samples is not None else min(2000, max(500, 50 * X.shape[1]))
+            X_f = self._filter_X(X)
+            kept_names = (
+                self._kept_feature_names
+                if hasattr(self, "_kept_feature_names") and self._kept_feature_names is not None
+                else self.feature_names
+            )
+            effective_n_samples = n_samples if n_samples is not None else min(2000, max(500, 50 * X_f.shape[1]))
             need_lime_rebuild = (
                 self._lime_explainer_cache is None
                 or self._lime_cached_X is None
@@ -874,22 +912,22 @@ class SurrogateSHAPExplainer:
             if need_lime_rebuild:
                 self._lime_cached_X = np.array(X, copy=True)
                 self._lime_explainer_cache = LimeTabularExplainer(
-                    training_data=X,
-                    feature_names=self.feature_names,
+                    training_data=X_f,
+                    feature_names=kept_names,
                     mode="regression",
                     discretize_continuous=False,
                 )
             exp = self._lime_explainer_cache.explain_instance(
-                X[instance_idx],
-                self.predict,
-                num_features=len(self.feature_names),
+                X_f[instance_idx],
+                self._model.predict,
+                num_features=len(kept_names),
                 num_samples=effective_n_samples,
             )
             # Use index-based matching to avoid ambiguous substring resolution
             lime_by_feature: dict[str, float] = {}
             for feat_idx, weight in next(iter(exp.local_exp.values()), []):
-                if 0 <= feat_idx < len(self.feature_names):
-                    name = self.feature_names[feat_idx]
+                if 0 <= feat_idx < len(kept_names):
+                    name = kept_names[feat_idx]
                     lime_by_feature[name] = lime_by_feature.get(name, 0.0) + float(weight)
 
             attributions = [
