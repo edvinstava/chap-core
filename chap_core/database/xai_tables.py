@@ -13,7 +13,7 @@ from chap_core.database.tables import Prediction
 
 
 class PredictionExplanationBase(DBModel):
-    prediction_id: int = Field(foreign_key="prediction.id")
+    prediction_id: int = Field(foreign_key="prediction.id", ondelete="CASCADE")
     org_unit: str
     period: str
     method: str

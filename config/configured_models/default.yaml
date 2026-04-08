@@ -101,6 +101,10 @@
     nightly_build: "@master"
     stable: "@96098064639955fa4e46209e6169c5a1496959a0"
 
+- url: https://github.com/edvinstava/chap-xai-mljar
+  versions:
+    nightly_build: "@master"
+    stable: "@f7b373619ea224a8e3dd74041fcb94a943f04e4f"
 
 #- url: https://github.com/dhis2-chap/ewars_plus_python_wrapper/
 #  versions:
