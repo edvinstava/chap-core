@@ -1,17 +1,20 @@
 import logging
 from pathlib import Path
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import yaml
 
 from chap_core.external.model_configuration import ModelTemplateConfigV2
-from chap_core.models.model_template import ModelConfiguration
 from chap_core.runners.command_line_runner import CommandLineRunner, CommandLineTrainPredictRunner
+from chap_core.runners.conda_runner import CondaRunner, CondaTrainPredictRunner
 from chap_core.runners.docker_runner import DockerRunner, DockerTrainPredictRunner
 from chap_core.runners.mlflow_runner import MlFlowTrainPredictRunner
 from chap_core.runners.renv_runner import RenvRunner, RenvTrainPredictRunner
 from chap_core.runners.runner import TrainPredictRunner
 from chap_core.runners.uv_runner import UvRunner, UvTrainPredictRunner
+
+if TYPE_CHECKING:
+    from chap_core.models.model_template import ModelConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +24,7 @@ def get_train_predict_runner_from_model_template_config(
     working_dir: Path,
     skip_environment=False,
     model_configuration: Optional["ModelConfiguration"] = None,
+    dry_run=False,
 ) -> TrainPredictRunner:
     """
     Utility function that returns a suitbale runner for a model given a ModelTemplateConfig (which contains information
@@ -34,6 +38,8 @@ def get_train_predict_runner_from_model_template_config(
         runner_type = "uv"
     elif model_template_config.renv_env is not None:
         runner_type = "renv"
+    elif model_template_config.conda_env is not None:
+        runner_type = "conda"
     elif model_template_config.python_env is not None:
         runner_type = "mlflow"
     else:
@@ -48,7 +54,7 @@ def get_train_predict_runner_from_model_template_config(
         config_dict = model_configuration.model_dump() if model_configuration is not None else {}
         yaml.dump(config_dict, file)
 
-    if skip_environment or runner_type in ("docker", "uv", "renv"):
+    if skip_environment or runner_type in ("docker", "uv", "renv", "conda"):
         # read yaml file into a dict
         assert model_template_config.entry_points is not None
         train_command = model_template_config.entry_points.train.command  # data["entry_points"]["train"]["command"]
@@ -64,21 +70,29 @@ def get_train_predict_runner_from_model_template_config(
         #     predict_command += f" --model_configuration {model_configuration_file}"
         if skip_environment:
             return CommandLineTrainPredictRunner(
-                CommandLineRunner(working_dir),
+                CommandLineRunner(working_dir, dry_run=dry_run),
                 train_command,
                 predict_command,
                 model_configuration_filename=yaml_filename,
             )
         elif runner_type == "uv":
             return UvTrainPredictRunner(
-                UvRunner(working_dir),
+                UvRunner(working_dir, dry_run=dry_run),
                 train_command,
                 predict_command,
                 model_configuration_filename=yaml_filename,
             )
         elif runner_type == "renv":
             return RenvTrainPredictRunner(
-                RenvRunner(working_dir),
+                RenvRunner(working_dir, dry_run=dry_run),
+                train_command,
+                predict_command,
+                model_configuration_filename=yaml_filename,
+            )
+        elif runner_type == "conda":
+            assert model_template_config.conda_env is not None
+            return CondaTrainPredictRunner(
+                CondaRunner(working_dir, model_template_config.conda_env, dry_run=dry_run),
                 train_command,
                 predict_command,
                 model_configuration_filename=yaml_filename,
@@ -86,7 +100,7 @@ def get_train_predict_runner_from_model_template_config(
         else:
             assert model_template_config.docker_env is not None
             logging.debug(f"Docker image is {model_template_config.docker_env.image}")
-            command_runner = DockerRunner(model_template_config.docker_env.image, working_dir)
+            command_runner = DockerRunner(model_template_config.docker_env.image, working_dir, dry_run=dry_run)
             return DockerTrainPredictRunner(command_runner, train_command, predict_command, yaml_filename)
     else:
         # assert model_configuration is None or model_configuration == {}, "ModelConfiguration (for templates) not supported when runner is mlflow for now"
@@ -116,7 +130,7 @@ def get_train_predict_runner(
         working_dir = mlproject_file.parent
 
         # read yaml file into a dict
-        with open(mlproject_file, "r") as file:
+        with open(mlproject_file) as file:
             data = yaml.load(file, Loader=yaml.FullLoader)
 
         train_command = data["entry_points"]["train"]["command"]

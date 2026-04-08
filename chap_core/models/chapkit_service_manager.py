@@ -9,7 +9,6 @@ import socket
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -30,9 +29,9 @@ def find_available_port(start_port: int = 8000, max_attempts: int = 100) -> int:
     raise ChapkitServiceStartupError(f"Could not find available port in range {start_port}-{start_port + max_attempts}")
 
 
-def is_url(path_or_url: str) -> bool:
+def is_url(path_or_url: str | Path) -> bool:
     """Detect if input is a URL or a directory path."""
-    return path_or_url.startswith(("http://", "https://"))
+    return str(path_or_url).startswith(("http://", "https://"))
 
 
 class ChapkitServiceManager:
@@ -48,7 +47,7 @@ class ChapkitServiceManager:
     def __init__(
         self,
         model_directory: str,
-        port: Optional[int] = None,
+        port: int | None = None,
         host: str = "127.0.0.1",
         startup_timeout: int = 60,
     ):
@@ -65,8 +64,8 @@ class ChapkitServiceManager:
         self.host = host
         self.port = port
         self.startup_timeout = startup_timeout
-        self._process: Optional[subprocess.Popen] = None
-        self._url: Optional[str] = None
+        self._process: subprocess.Popen | None = None
+        self._url: str | None = None
 
     @property
     def url(self) -> str:

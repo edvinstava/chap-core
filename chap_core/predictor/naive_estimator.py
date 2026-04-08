@@ -29,7 +29,7 @@ class NaivePredictor:
                         len(future_data[location]) * num_samples,
                     ).reshape(-1, num_samples),
                 )  # type: ignore[call-arg]
-                for location in future_data.keys()
+                for location in future_data.keys()  # noqa: SIM118
             }
         )
         return samples
@@ -40,7 +40,7 @@ class NaivePredictor:
 
     @classmethod
     def load(cls, filename: str):
-        with open(filename, "r") as f:
+        with open(filename) as f:
             mean_dict = json.load(f)
         return cls(mean_dict)
 
@@ -52,5 +52,5 @@ class NaiveEstimator:
     )
 
     def train(self, data: DataSet) -> NaivePredictor:
-        mean_dict = {location: np.nanmean(data[location].disease_cases) for location in data.keys()}
+        mean_dict = {location: np.nanmean(data[location].disease_cases) for location in data.keys()}  # noqa: SIM118
         return NaivePredictor(mean_dict)

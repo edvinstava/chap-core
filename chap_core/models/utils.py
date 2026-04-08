@@ -4,21 +4,39 @@ import shutil
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Union
+from typing import TYPE_CHECKING, Literal
 
 import git
+import httpx
 import yaml
+from chapkit.api.service_builder import MLServiceInfo
 
 from chap_core.exceptions import InvalidModelException
 from chap_core.external.external_model import logger
 from chap_core.external.model_configuration import ModelTemplateConfigV2
+from chap_core.models.chapkit_service_manager import is_url
 from chap_core.models.external_chapkit_model import ExternalChapkitModelTemplate
 from chap_core.models.model_template import ModelTemplate
+
+CHAP_RUNS_DIR = Path(os.getenv("CHAP_RUNS_DIR", "runs/"))
+
+
+def _is_chapkit_url(url: str) -> bool:
+    """Probe a URL to check if it's a running chapkit service."""
+    try:
+        response = httpx.get(f"{url.rstrip('/')}/api/v1/info", timeout=5)
+        if response.status_code == 200:
+            MLServiceInfo.model_validate(response.json())
+            return True
+    except Exception:
+        pass
+    return False
+
 
 if TYPE_CHECKING:
     from chap_core.models.external_model import ExternalModel
 
-ModelTemplateType = Union[ModelTemplate, ExternalChapkitModelTemplate]
+ModelTemplateType = ModelTemplate | ExternalChapkitModelTemplate
 
 
 def _get_working_dir(model_path, base_working_dir, run_dir_type, model_name):
@@ -88,32 +106,35 @@ def _get_model_code_base(model_path, base_working_dir, run_dir_type):
         shutil.copytree(
             model_path,
             working_dir,
-            ignore=lambda dir, contents: list({".venv", "venv", "runs"}.intersection(contents)),
+            ignore=lambda _dir, contents: list({".venv", "venv", "runs"}.intersection(contents)),
             dirs_exist_ok=True,
         )
     return working_dir
 
 
-def get_model_template_from_mlproject_file(mlproject_file, ignore_env=False, working_dir=None) -> ModelTemplate:
+def get_model_template_from_mlproject_file(
+    mlproject_file, ignore_env=False, working_dir=None, dry_run=False
+) -> ModelTemplate:
     if working_dir is None:
         working_dir = Path(mlproject_file).parent
     else:
         working_dir = Path(working_dir)
 
-    with open(mlproject_file, "r") as file:
+    with open(mlproject_file) as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
     config = ModelTemplateConfigV2.model_validate(config)
 
-    model_template = ModelTemplate(config, working_dir, ignore_env)
+    model_template = ModelTemplate(config, working_dir, ignore_env, dry_run=dry_run)
     return model_template
 
 
 def get_model_template_from_directory_or_github_url(
     model_template_path: str,
-    base_working_dir: Path = Path("runs/"),
+    base_working_dir: Path = CHAP_RUNS_DIR,
     ignore_env: bool = False,
     run_dir_type: str = "timestamp",
     is_chapkit_model: bool = False,
+    dry_run: bool = False,
 ) -> ModelTemplateType:
     """
     Note: Preferably use ModelTemplate.from_directory_or_github_url instead of
@@ -136,13 +157,13 @@ def get_model_template_from_directory_or_github_url(
         "use_existing" will use the existing directory specified by the model path if that exists. If that does not exist, "latest" will be used.
     """
 
-    if is_chapkit_model:
+    detected = not is_chapkit_model and is_url(model_template_path) and _is_chapkit_url(model_template_path)
+    if is_chapkit_model or detected:
+        if detected:
+            logger.info("Auto-detected chapkit service at %s", model_template_path)
         logger.debug("Model is chapkit model")
-        # ExternalChapkitModelTemplate now handles both URLs and directory paths.
-        # For directory mode, the caller must use it as a context manager.
         template = ExternalChapkitModelTemplate(model_template_path)
-        # Only verify name for URL mode (service already running)
-        if template._is_url_mode:
+        if template.is_url_mode:
             assert template.name is not None, template
         return template
 
@@ -159,13 +180,15 @@ def get_model_template_from_directory_or_github_url(
     if not (working_dir / "MLproject").exists():
         raise InvalidModelException("No MLproject file found in model directory")
 
-    model_template = get_model_template_from_mlproject_file(working_dir / "MLproject", ignore_env=ignore_env)
+    model_template = get_model_template_from_mlproject_file(
+        working_dir / "MLproject", ignore_env=ignore_env, dry_run=dry_run
+    )
     return model_template
 
 
 def get_model_from_directory_or_github_url(
     model_template_path,
-    base_working_dir=Path("runs/"),
+    base_working_dir=CHAP_RUNS_DIR,
     ignore_env=False,
     run_dir_type: Literal["timestamp", "latest", "use_existing"] = "timestamp",
     model_configuration_yaml: str | None = None,
@@ -197,7 +220,7 @@ def get_model_from_directory_or_github_url(
     model_configuration = None
     # config_class = template.get_config_class()
     if model_configuration_yaml:
-        with open(model_configuration_yaml, "r") as file:
+        with open(model_configuration_yaml) as file:
             model_configuration = yaml.load(file, Loader=yaml.FullLoader)
             # model_configuration = config_class.model_validate(model_configuration)
 

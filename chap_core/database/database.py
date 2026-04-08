@@ -7,7 +7,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import List, Optional, cast
+from typing import cast
 
 import psycopg2
 import sqlalchemy
@@ -59,7 +59,8 @@ if database_url is not None:
     else:
         raise ValueError("Failed to connect to database")
 else:
-    logger.warning("Database url not set. Database operations will not work")
+    # info, not warning: CLI commands import this module transitively but don't need a database
+    logger.info("Database url not set. Database operations will not work")
 
 
 class SessionWrapper:
@@ -71,7 +72,7 @@ class SessionWrapper:
 
     def __init__(self, local_engine=None, session=None):
         self.engine = local_engine  #  or engine
-        self._session: Optional[Session] = session
+        self._session: Session | None = session
 
     @property
     def session(self) -> Session:
@@ -105,7 +106,7 @@ class SessionWrapper:
         ).first()
         if existing_template:
             logger.info(f"Model template with name {model_template.name} already exists. Returning existing id")
-            return cast(int, existing_template.id)
+            return cast("int", existing_template.id)
 
         # add db entry
         logger.info(f"Adding model template: {model_template}")
@@ -113,7 +114,7 @@ class SessionWrapper:
         self.session.commit()
 
         # return id
-        return cast(int, model_template.id)
+        return cast("int", model_template.id)
 
     def add_model_template_from_yaml_config(self, model_template_config: ModelTemplateConfigV2) -> int:
         """Sets the ModelSpecRead a yaml string.
@@ -140,14 +141,14 @@ class SessionWrapper:
             # Unarchive if it was previously archived
             existing_template.archived = False
             self.session.commit()
-            return cast(int, existing_template.id)
+            return cast("int", existing_template.id)
 
         # Create new template
         db_object = ModelTemplateDB(**d)
         logger.info(f"Adding model template: {db_object}")
         self.session.add(db_object)
         self.session.commit()
-        return cast(int, db_object.id)
+        return cast("int", db_object.id)
 
     def add_configured_model(
         self,
@@ -175,7 +176,7 @@ class SessionWrapper:
         existing_configured = self.session.exec(select(ConfiguredModelDB).where(ConfiguredModelDB.name == name)).first()
         if existing_configured:
             logger.info(f"Configured model with name {name} already exists. Returning existing id")
-            return cast(int, existing_configured.id)
+            return cast("int", existing_configured.id)
 
         # create and add db entry
         configured_model = ConfiguredModelDB(
@@ -192,9 +193,9 @@ class SessionWrapper:
         self.session.commit()
 
         # return id
-        return cast(int, configured_model.id)
+        return cast("int", configured_model.id)
 
-    def get_configured_models(self) -> List[ModelSpecRead]:
+    def get_configured_models(self) -> list[ModelSpecRead]:
         # TODO: using ModelSpecRead for backwards compatibility, should in future return ConfiguredModelDB?
 
         # get configured models from db, excluding those with archived templates
@@ -202,7 +203,7 @@ class SessionWrapper:
             select(ConfiguredModelDB)
             .options(selectinload(ConfiguredModelDB.model_template))  # type: ignore[arg-type]
             .join(ModelTemplateDB)
-            .where(ModelTemplateDB.archived == False)  # noqa: E712
+            .where(ModelTemplateDB.archived == False)
         ).all()
 
         # serialize to json and combine configured model with model template
@@ -224,7 +225,7 @@ class SessionWrapper:
                 logger.error(
                     f"Template id={configured_model.model_template.id if configured_model.model_template else 'None'}"
                 )
-                logger.error(f"Exception: {type(e).__name__}: {str(e)}")
+                logger.error(f"Exception: {type(e).__name__}: {e!s}")
                 logger.error("Full traceback:", exc_info=True)
                 raise
 
@@ -304,7 +305,7 @@ class SessionWrapper:
             all_names = self.session.exec(select(ConfiguredModelDB.name)).all()
             raise ValueError(
                 f"Configured model with name {configured_model_name} not found. Available names: {all_names}"
-            )
+            ) from None
 
         return configured_model
 
@@ -331,7 +332,7 @@ class SessionWrapper:
         else:
             logger.info(f"Assuming github model at {configured_model.model_template.source_url}")
             return cast(
-                ConfiguredModel,
+                "ConfiguredModel",
                 ModelTemplate.from_directory_or_github_url(
                     configured_model.model_template.source_url,
                     ignore_env=ignore_env,
@@ -360,12 +361,14 @@ class SessionWrapper:
         self.session.add(backtest)
         self.session.commit()
 
-    def add_predictions(self, predictions, dataset_id, model_id, name, metadata: dict = {}):
-        n_periods = len(list(predictions.values())[0])
+    def add_predictions(self, predictions, dataset_id, model_id, name, metadata: dict | None = None):
+        if metadata is None:
+            metadata = {}
+        n_periods = len(next(iter(predictions.values())))
         samples_ = [
             PredictionSamplesEntry(period=period.id, org_unit=location, values=value.tolist())
             for location, data in predictions.items()
-            for period, value in zip(data.time_period, data.samples)
+            for period, value in zip(data.time_period, data.samples, strict=False)
         ]
         org_units = list(predictions.keys())
         model_db_id = self.session.exec(select(ConfiguredModelDB.id).where(ConfiguredModelDB.name == model_id)).first()
@@ -385,9 +388,9 @@ class SessionWrapper:
         self.session.commit()
         return prediction.id
 
-    def add_dataset_from_csv(self, name: str, csv_path: Path, geojson_path: Optional[Path] = None):
+    def add_dataset_from_csv(self, name: str, csv_path: Path, geojson_path: Path | None = None):
         dataset = _DataSet.from_csv(csv_path, dataclass=FullData)
-        geojson_content = open(geojson_path, "r").read() if geojson_path else None
+        geojson_content = open(geojson_path).read() if geojson_path else None
         features = None
         if geojson_content is not None:
             features = Polygons.from_geojson(json.loads(geojson_content), id_property="NAME_1").feature_collection()
@@ -462,9 +465,9 @@ class SessionWrapper:
             logger.info(f"Loading polygons from geojson for dataset id {dataset_id}")
             new_dataset.set_polygons(Polygons.from_geojson(json.loads(dataset.geojson), id_property="district").data)
 
-        return cast(_DataSet, new_dataset)
+        return cast("_DataSet", new_dataset)
 
-    def get_dataset_by_name(self, dataset_name: str) -> Optional[DataSet]:
+    def get_dataset_by_name(self, dataset_name: str) -> DataSet | None:
         dataset = self.session.exec(select(DataSet).where(DataSet.name == dataset_name)).first()
         return dataset
 
@@ -733,19 +736,18 @@ def _get_column_default_value(column):
     Determine appropriate default value for a column based on its type and properties.
     """
     # Check if column has a default value defined
-    if column.default is not None:
-        if hasattr(column.default, "arg") and column.default.arg is not None:
-            # Check if it's a factory function (like list or dict)
-            if callable(column.default.arg):
-                try:
-                    result = column.default.arg()
-                    if isinstance(result, list):
-                        return "[]"
-                    elif isinstance(result, dict):
-                        return "{}"
-                except Exception:
-                    pass
-            return column.default.arg
+    if column.default is not None and hasattr(column.default, "arg") and column.default.arg is not None:
+        # Check if it's a factory function (like list or dict)
+        if callable(column.default.arg):
+            try:
+                result = column.default.arg()
+                if isinstance(result, list):
+                    return "[]"
+                elif isinstance(result, dict):
+                    return "{}"
+            except Exception:
+                pass
+        return column.default.arg
 
     # Check column type and provide appropriate defaults
     column_type = str(column.type).lower()

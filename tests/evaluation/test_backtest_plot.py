@@ -12,8 +12,11 @@ from chap_core.assessment.backtest_plots import (
     create_plot_from_evaluation,
     BacktestPlotBase,
 )
-from chap_core.assessment.backtest_plots.evaluation_plot import EvaluationPlot
+from chap_core.assessment.backtest_plots.evaluation_plot import EvaluationPlot, _infer_split_periods
+from chap_core.assessment.backtest_plots.horizon_location_grid import HorizonLocationGridPlot
+from chap_core.plotting.backtest_plot import clean_time
 from chap_core.assessment.backtest_plots.metrics_dashboard import MetricsDashboard
+from chap_core.assessment.backtest_plots.predicted_vs_actual_plot import PredictedVsActualPlot
 from chap_core.assessment.backtest_plots.sample_bias_plot import SampleBiasPlot
 from chap_core.assessment.evaluation import Evaluation
 from chap_core.cli_endpoints.utils import plot_backtest
@@ -89,6 +92,74 @@ def test_metrics_dashboard_directly(flat_observations, flat_forecasts, default_t
     assert chart is not None
 
 
+def test_horizon_location_grid_directly(flat_observations, flat_forecasts_multiple_samples, default_transformer):
+    """Test the horizon location grid plot with multiple-sample forecasts."""
+    plot = HorizonLocationGridPlot()
+    chart = plot.plot(pd.DataFrame(flat_observations), pd.DataFrame(flat_forecasts_multiple_samples))
+    assert chart is not None
+
+
+def test_predicted_vs_actual_plot_directly(flat_observations, flat_forecasts_multiple_samples, default_transformer):
+    """Test the predicted vs actual scatter plot with multiple-sample forecasts."""
+    plot = PredictedVsActualPlot()
+    chart = plot.plot(pd.DataFrame(flat_observations), pd.DataFrame(flat_forecasts_multiple_samples))
+    assert chart is not None
+
+
+def test_infer_split_periods_monthly_format():
+    """Test that _infer_split_periods produces date strings, not repr strings like 'Month(2022-1)'."""
+    df = pd.DataFrame(
+        {
+            "location": ["loc1", "loc1"],
+            "time_period": ["2022-01", "2022-02"],
+            "horizon_distance": [1, 2],
+            "q_50": [10.0, 12.0],
+        }
+    )
+    result = _infer_split_periods(df)
+    for split_period in result["split_period"]:
+        assert "Month(" not in split_period, f"Got repr string: {split_period}"
+        assert split_period.startswith("20"), f"Unexpected format: {split_period}"
+
+
+@pytest.mark.parametrize(
+    "period_str, expected",
+    [
+        ("2022-01", "2022-01-01"),
+        ("202201", "2022-01-01"),
+        ("2022-W13", "2022-03-28"),
+        ("2022W13", "2022-03-28"),
+        ("2022-12", "2022-12-01"),
+        ("202212", "2022-12-01"),
+    ],
+)
+def test_clean_time_accepts_all_period_formats(period_str, expected):
+    assert clean_time(period_str) == expected
+
+
+def test_evaluation_plot_monthly_data(default_transformer):
+    """Test that evaluation plot works with monthly time periods."""
+    forecasts = pd.DataFrame(
+        {
+            "location": ["loc1"] * 4 + ["loc2"] * 4,
+            "time_period": ["2022-01", "2022-02"] * 2 + ["2022-01", "2022-02"] * 2,
+            "horizon_distance": [1, 2, 1, 2, 1, 2, 1, 2],
+            "sample": [0, 0, 1, 1, 0, 0, 1, 1],
+            "forecast": [10.0, 12.0, 11.0, 13.0, 20.0, 22.0, 21.0, 23.0],
+        }
+    )
+    observations = pd.DataFrame(
+        {
+            "location": ["loc1", "loc1", "loc2", "loc2"],
+            "time_period": ["2022-01", "2022-02", "2022-01", "2022-02"],
+            "disease_cases": [11.0, 13.0, 19.0, 21.0],
+        }
+    )
+    plot = EvaluationPlot()
+    chart = plot.plot(observations, forecasts)
+    assert chart is not None
+
+
 @pytest.mark.parametrize("plot_id", list(get_backtest_plots_registry().keys()))
 def test_all_registered_plots_from_backtest(plot_id: str, simulated_backtest: BackTest, default_transformer):
     """Test that all registered plots can be successfully generated from a BackTest."""
@@ -115,6 +186,22 @@ def test_plot_backtest_cli(backtest: BackTest, tmp_path: Path, default_transform
 
     assert output_file.exists()
     assert output_file.stat().st_size > 0
+
+
+def test_eval_cmd_plot_flag(backtest: BackTest, tmp_path: Path, default_transformer):
+    """Test that eval_cmd's plot flag generates an HTML plot file."""
+    from chap_core.assessment.backtest_plots import create_plot_from_evaluation
+
+    evaluation = Evaluation.from_backtest(backtest)
+    nc_file = tmp_path / "evaluation.nc"
+    evaluation.to_file(nc_file)
+
+    plot_path = nc_file.with_suffix(".html")
+    chart = create_plot_from_evaluation("evaluation_plot", evaluation)
+    chart.save(str(plot_path))
+
+    assert plot_path.exists()
+    assert plot_path.stat().st_size > 0
 
 
 def test_generate_pdf_report(backtest: BackTest, tmp_path: Path):

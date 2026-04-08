@@ -68,7 +68,7 @@ class IntegrationTest:
         errors = []
         for _ in range(40):
             try:
-                response = requests.get(self._chap_url + "/v1/health")
+                response = requests.get(self._chap_url + "/health")
                 break
             except requests.exceptions.ConnectionError as e:
                 logger.error("Failed to connect to %s. Will sleep and try again." % self._chap_url)
@@ -90,8 +90,6 @@ class IntegrationTest:
         except:
             logger.error("Failed to connect to %s" % chap_url)
             logger.error("Failed to get %s" % url)
-            exception_info = requests.get(chap_url + "/v1/get-exception").json()
-            logger.error(exception_info)
             raise
         assert response.status_code == 200, (response.status_code, response.text)
         return response.json()
@@ -270,6 +268,7 @@ class IntegrationTest:
                     break
                 logger.info(f"Logs for job {job_id} are empty, retrying...")
                 time.sleep(1)
+            assert logs is not None, "Logs should not be None after 10 seconds of retries"
             assert logs.strip().strip('"'), "Logs should contain actual content after 10 seconds of retries"
             return logs
         except Exception as e:

@@ -34,7 +34,20 @@ git checkout [VERSION] #Replace with your desired version, e.g. v1.0.18
 
 For latest release go to: [https://github.com/dhis2-chap/chap-core/releases](https://github.com/dhis2-chap/chap-core/releases)
 
-## 3. Start Chap Core
+## 3. Configure Environment Variables
+
+Copy the example environment file:
+
+```console
+cp .env.example .env
+```
+
+This creates a `.env` file with default database credentials used by Docker Compose.
+
+!!! tip "Production deployments"
+    For production, open `.env` and change at least `POSTGRES_PASSWORD` to a strong, unique value. You can optionally change `POSTGRES_USER` as well. These credentials are set permanently when the database volume is first created, so choose them before running `docker compose up` for the first time.
+
+## 4. Start Chap Core
 
 ```console
 docker compose up
@@ -51,7 +64,7 @@ This single command will:
 
 The Chap Core REST API will be available at `http://localhost:8000` once all services are running.
 
-## 4. Verify the Installation
+## 5. Verify the Installation
 
 You can verify that Chap Core is running correctly by:
 

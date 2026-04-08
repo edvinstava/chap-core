@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 
-from chap_core.runners.command_line_runner import CommandLineTrainPredictRunner, run_command
+from chap_core.runners.command_line_runner import CommandLineTrainPredictRunner
 
 from .runner import Runner
 
@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 class UvRunner(Runner):
     """Runs commands through uv in a pyproject.toml-managed environment"""
 
-    def __init__(self, working_dir: str | Path):
+    def __init__(self, working_dir: str | Path, dry_run=False):
+        super().__init__(dry_run=dry_run)
         self._working_dir = Path(working_dir)
 
     def run_command(self, command):
@@ -29,7 +30,7 @@ class UvRunner(Runner):
             cache_dir = self._working_dir / ".uv-cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         env["UV_CACHE_DIR"] = str(cache_dir.resolve())
-        return run_command(uv_command, self._working_dir, env=env)
+        return self._execute(uv_command, self._working_dir, env=env)
 
     def store_file(self, file_path: str | None = None) -> None:
         pass

@@ -2,8 +2,9 @@ import inspect
 import json
 import logging
 import os
+from collections.abc import Callable
 from datetime import datetime
-from typing import Callable, Generic, TypeVar, cast
+from typing import TypeVar, cast
 
 import celery
 from celery import Celery, Task, shared_task
@@ -11,11 +12,11 @@ from celery.result import AsyncResult
 from celery.utils.log import get_task_logger
 from dotenv import find_dotenv, load_dotenv
 from pydantic import BaseModel
-from redis import Redis
 from sqlalchemy import create_engine
 
 from ..database.database import SessionWrapper
 from ..log_config import CHAP_LOGS_DIR, get_status_logger
+from ..util import load_redis
 
 ReturnType = TypeVar("ReturnType")
 
@@ -58,9 +59,7 @@ app.conf.update(
 
 
 # Setup Redis connection (for job metadata)
-# TODO: switch to using utils.load_redis()?
-redis_url = "redis" if "localhost" not in url else "localhost"
-r = Redis(host=redis_url, port=6379, db=2, decode_responses=True)  # TODO: how to set this better?
+r = load_redis(db=2, decode_responses=True)
 
 
 # logger.warning("No database URL set")
@@ -122,9 +121,9 @@ class TrackedTask(Task):
 
         try:
             # Mark as started when the task is actually executing
-            r.hmset(
+            r.hset(
                 f"job_meta:{task_id}",
-                {
+                mapping={
                     "status": "STARTED",
                     # "start_time": datetime.now().isoformat(), # update the start time
                 },
@@ -147,9 +146,14 @@ class TrackedTask(Task):
         job_type = kwargs.pop(JOB_TYPE_KW, None) or "Unspecified"
         result = super().apply_async(args=args, kwargs=kwargs, **options)
 
-        r.hmset(
+        r.hset(
             f"job_meta:{result.id}",
-            {"job_name": job_name, "job_type": job_type, "status": "PENDING", "start_time": datetime.now().isoformat()},
+            mapping={
+                "job_name": job_name,
+                "job_type": job_type,
+                "status": "PENDING",
+                "start_time": datetime.now().isoformat(),
+            },
         )
 
         return result
@@ -163,20 +167,20 @@ class TrackedTask(Task):
         except TypeError:
             logger.error("RETVAL: Could not serialize return value to JSON")
             logger.error(str(retval))
-            r.hmset(
+            r.hset(
                 f"job_meta:{task_id}",
-                {
+                mapping={
                     "status": "FAILURE",
                     # "duration": duration,
                     "error": "Could not serialize return value to JSON",
                     "end_time": datetime.now().isoformat(),
                 },
             )
-            raise Exception("Could not serialize return value to JSON. Return value is:" + str(retval))
+            raise Exception("Could not serialize return value to JSON. Return value is:" + str(retval)) from None
 
-        r.hmset(
+        r.hset(
             f"job_meta:{task_id}",
-            {
+            mapping={
                 "status": "SUCCESS",
                 # "duration": duration,
                 "result": retval,
@@ -189,9 +193,9 @@ class TrackedTask(Task):
         # start = float(r.hget(f"job_meta:{task_id}", "start_time") or time.time())
         # duration = time.time() - start
 
-        r.hmset(
+        r.hset(
             f"job_meta:{task_id}",
-            {
+            mapping={
                 "status": "FAILURE",
                 # "duration": duration,
                 "error": str(exc),
@@ -238,7 +242,7 @@ JOB_TYPE_KW = "__job_type__"
 JOB_NAME_KW = "__job_name__"
 
 
-class CeleryJob(Generic[ReturnType]):
+class CeleryJob[ReturnType]:
     """Wrapper for a Celery Job"""
 
     def __init__(self, job: celery.Task, app: Celery):
@@ -251,11 +255,11 @@ class CeleryJob(Generic[ReturnType]):
 
     @property
     def status(self) -> str:
-        return cast(str, self._result.state)
+        return cast("str", self._result.state)
 
     @property
     def result(self) -> ReturnType:
-        return cast(ReturnType, self._result.result)
+        return cast("ReturnType", self._result.result)
 
     @property
     def progress(self) -> float:
@@ -265,9 +269,9 @@ class CeleryJob(Generic[ReturnType]):
         self._result.revoke(terminate=True)
 
         # Update Redis metadata to reflect the cancellation
-        r.hmset(
+        r.hset(
             f"job_meta:{self._job.id}",
-            {
+            mapping={
                 "status": "REVOKED",
                 "end_time": datetime.now().isoformat(),
             },
@@ -313,7 +317,7 @@ class CeleryJob(Generic[ReturnType]):
         return fallback
 
 
-class CeleryPool(Generic[ReturnType]):
+class CeleryPool[ReturnType]:
     """Simple abstraction for a Celery Worker"""
 
     def __init__(self, celery: Celery = None):

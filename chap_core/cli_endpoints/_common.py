@@ -2,15 +2,17 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 import pandas as pd
+import pooch
 import yaml
 
 from chap_core.database.model_templates_and_config_tables import ModelConfiguration
 from chap_core.file_io.example_data_set import datasets
 from chap_core.geometry import Polygons
 from chap_core.models.model_template import ModelTemplate
+from chap_core.models.utils import CHAP_RUNS_DIR
 from chap_core.spatio_temporal_data.multi_country_dataset import MultiCountryDataSet
 from chap_core.spatio_temporal_data.temporal_dataclass import DataSet, DataSetMetaData
 
@@ -30,7 +32,7 @@ def get_model(
 ) -> Any:
     template = ModelTemplate.from_directory_or_github_url(
         name,
-        base_working_dir=Path("./runs/"),
+        base_working_dir=CHAP_RUNS_DIR,
         ignore_env=ignore_environment,
         run_dir_type=run_directory_type,
         is_chapkit_model=is_chapkit_model,
@@ -53,11 +55,9 @@ def save_results(report_filename: str, results_dict: dict[Any, Any]) -> None:
     first_model = True
     for key, value in results_dict.items():
         aggregate_metric_dist = value[0]
-        row: list[Any] = [key]
-        for k, v in aggregate_metric_dist.items():
-            row.append(v)
+        row: list[Any] = [key, *aggregate_metric_dist.values()]
         if first_model:
-            data.append(["Model"] + list(aggregate_metric_dist.keys()))
+            data.append(["Model", *list(aggregate_metric_dist.keys())])
             first_model = False
         data.append(row)
         full_data[key] = pd.DataFrame(value[1])
@@ -89,7 +89,32 @@ def create_model_lists(model_configuration_yaml: str | None, model_name: str) ->
     return model_configuration_yaml_list, model_list
 
 
-def discover_geojson(csv_path: Path) -> Optional[Path]:
+def resolve_csv_path(dataset_csv: str | Path) -> tuple[Path, Path | None]:
+    """If dataset_csv is a URL, download it and return local path + optional geojson path.
+
+    For local paths, returns the path unchanged with no geojson path.
+    For URLs, downloads the CSV using pooch and also attempts to download
+    a companion .geojson file from the same URL with the extension replaced.
+    """
+    dataset_csv = str(dataset_csv)
+    if not dataset_csv.startswith(("http://", "https://")):
+        return Path(dataset_csv), None
+
+    logger.info(f"Downloading CSV from URL: {dataset_csv}")
+    local_path = Path(pooch.retrieve(dataset_csv, known_hash=None))
+
+    geojson_url = dataset_csv.replace(".csv", ".geojson")
+    geojson_path = None
+    try:
+        geojson_path = Path(pooch.retrieve(geojson_url, known_hash=None))
+        logger.info(f"Downloaded companion GeoJSON from: {geojson_url}")
+    except Exception:
+        logger.debug(f"No companion GeoJSON found at: {geojson_url}")
+
+    return local_path, geojson_path
+
+
+def discover_geojson(csv_path: Path) -> Path | None:
     """
     Discover GeoJSON file alongside CSV file.
 
@@ -109,8 +134,8 @@ def discover_geojson(csv_path: Path) -> Optional[Path]:
 
 def load_dataset_from_csv(
     csv_path: Path,
-    geojson_path: Optional[Path] = None,
-    column_mapping: Optional[dict[str, str]] = None,
+    geojson_path: Path | None = None,
+    column_mapping: dict[str, str] | None = None,
 ) -> DataSet:
     """
     Load dataset from CSV file with optional GeoJSON polygons.
@@ -126,6 +151,7 @@ def load_dataset_from_csv(
     """
     logging.info(f"Loading dataset from {csv_path}")
 
+    dataset: DataSet
     if column_mapping is not None:
         logging.info(f"Applying column mapping: {column_mapping}")
         df = pd.read_csv(csv_path)
@@ -152,6 +178,7 @@ def load_dataset(
     polygons_id_field: str | None,
     polygons_json: Path | None,
 ) -> DataSet:
+    dataset: DataSet
     if dataset_name is None:
         assert dataset_csv is not None, "Must specify a dataset name or a dataset csv file"
         logging.info(f"Loading dataset from {dataset_csv}")

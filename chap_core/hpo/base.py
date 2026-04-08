@@ -3,12 +3,12 @@
 # import time
 import json
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
 """
-Constraints on non-categorical hyperparameter values:   
+Constraints on non-categorical hyperparameter values:
     log=True
         floats: step=None and low/high > 0
         ints: step=1 and low/high > 0
@@ -31,7 +31,7 @@ class Int:
 class Float:
     low: float
     high: float
-    step: Optional[float] = None
+    step: float | None = None
     log: bool = False
 
 

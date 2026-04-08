@@ -2,8 +2,9 @@
 
 import logging
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, cast
 
+import pandas as pd
 import yaml
 from pydantic import BaseModel
 
@@ -21,6 +22,7 @@ from chap_core.database.model_templates_and_config_tables import (
 from chap_core.hpo.base import load_search_space_from_config
 from chap_core.log_config import initialize_logging
 from chap_core.models.model_template import ModelTemplate
+from chap_core.models.utils import CHAP_RUNS_DIR
 from chap_core.preference_learning.decision_maker import (
     DecisionMaker,
     MetricDecisionMaker,
@@ -58,9 +60,14 @@ def _compute_metrics(evaluation: Evaluation) -> dict:
     flat_data = evaluation.to_flat()
 
     # Compute all aggregated metrics (those that return a single value)
+    historical_obs = flat_data.historical_observations
+    historical_df = pd.DataFrame(cast("pd.DataFrame", historical_obs)) if historical_obs is not None else None
+
     results = {}
     for metric_id, metric_cls in available_metrics.items():
-        metric = metric_cls()
+        metric = metric_cls(historical_observations=historical_df)
+        if not metric.is_applicable(flat_data.observations):
+            continue
         try:
             metric_df = metric.get_global_metric(flat_data.observations, flat_data.forecasts)
             if len(metric_df) == 1:
@@ -92,7 +99,7 @@ def _create_evaluation(
     logger.info(f"Loading model template from {model_candidate.model_name}")
     template = ModelTemplate.from_directory_or_github_url(
         model_candidate.model_name,
-        base_working_dir=Path("./runs/"),
+        base_working_dir=CHAP_RUNS_DIR,
         ignore_env=run_config.ignore_environment,
         run_dir_type=run_config.run_directory_type,
         is_chapkit_model=run_config.is_chapkit_model,
@@ -133,7 +140,7 @@ def _create_evaluation(
 def preference_learn(
     model_name: str,
     dataset_csv: Path,
-    search_space_yaml: Optional[Path] = None,
+    search_space_yaml: Path | None = None,
     state_file: Path = Path("preference_state.json"),
     backtest_params: BackTestParams = BackTestParams(n_periods=3, n_splits=7, stride=1),
     run_config: RunConfig = RunConfig(),
@@ -177,7 +184,7 @@ def preference_learn(
             # Try to get search space from model template
             template = ModelTemplate.from_directory_or_github_url(
                 model_name,
-                base_working_dir=Path("./runs/"),
+                base_working_dir=CHAP_RUNS_DIR,
                 ignore_env=run_config.ignore_environment,
                 run_dir_type=run_config.run_directory_type,
                 is_chapkit_model=run_config.is_chapkit_model,
@@ -190,7 +197,7 @@ def preference_learn(
                 )
         else:
             logger.info(f"Loading search space from {search_space_yaml}")
-            with open(search_space_yaml, "r") as f:
+            with open(search_space_yaml) as f:
                 raw_search_space = yaml.safe_load(f)
 
         search_space = load_search_space_from_config(raw_search_space)

@@ -11,7 +11,7 @@ Example usage:
     import altair as alt
 
     @backtest_plot(
-        id="my_custom_plot",
+        plot_id="my_custom_plot",
         name="My Custom Plot",
         description="A custom visualization showing forecast accuracy."
     )
@@ -47,19 +47,23 @@ Data schemas:
         - disease_cases: float - Historical observed disease cases
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Type, Union
+from typing import TYPE_CHECKING
 
 import altair as alt
-import pandas as pd
 
-from chap_core.database.tables import BackTest
+if TYPE_CHECKING:
+    import pandas as pd
+
+    from chap_core.database.tables import BackTest
 
 # Type alias for Altair chart types that plots can return
-ChartType = Union[alt.Chart, alt.VConcatChart, alt.FacetChart, alt.LayerChart, alt.HConcatChart]
+ChartType = alt.Chart | alt.VConcatChart | alt.FacetChart | alt.LayerChart | alt.HConcatChart
 
 # Global registry for backtest plots
-_backtest_plots_registry: Dict[str, Type["BacktestPlotBase"]] = {}
+_backtest_plots_registry: dict[str, type[BacktestPlotBase]] = {}
 
 
 class BacktestPlotBase(ABC):
@@ -86,7 +90,7 @@ class BacktestPlotBase(ABC):
         self,
         observations: pd.DataFrame,
         forecasts: pd.DataFrame,
-        historical_observations: Optional[pd.DataFrame] = None,
+        historical_observations: pd.DataFrame | None = None,
     ) -> ChartType:
         """
         Generate the visualization from flat DataFrames.
@@ -107,11 +111,10 @@ class BacktestPlotBase(ABC):
         ChartType
             Altair chart specification (Chart, VConcatChart, FacetChart, etc.)
         """
-        pass
 
 
 def backtest_plot(
-    id: str,
+    plot_id: str,
     name: str,
     description: str = "",
     needs_historical: bool = False,
@@ -121,7 +124,7 @@ def backtest_plot(
 
     Parameters
     ----------
-    id : str
+    plot_id : str
         Unique identifier for the plot (used in URLs/APIs)
     name : str
         Human-readable display name
@@ -134,7 +137,7 @@ def backtest_plot(
     Example
     -------
     @backtest_plot(
-        id="sample_bias",
+        plot_id="sample_bias",
         name="Sample Bias Plot",
         description="Shows forecast bias relative to observations"
     )
@@ -143,22 +146,22 @@ def backtest_plot(
             ...
     """
 
-    def decorator(cls: Type[BacktestPlotBase]) -> Type[BacktestPlotBase]:
+    def decorator(cls: type[BacktestPlotBase]) -> type[BacktestPlotBase]:
         if not issubclass(cls, BacktestPlotBase):
             raise TypeError(f"{cls.__name__} must inherit from BacktestPlotBase")
 
-        cls.id = id
+        cls.id = plot_id
         cls.name = name
         cls.description = description
         cls.needs_historical = needs_historical
 
-        _backtest_plots_registry[id] = cls
+        _backtest_plots_registry[plot_id] = cls
         return cls
 
     return decorator
 
 
-def get_backtest_plots_registry() -> Dict[str, Type[BacktestPlotBase]]:
+def get_backtest_plots_registry() -> dict[str, type[BacktestPlotBase]]:
     """
     Get the registry of all registered backtest plots.
 
@@ -170,7 +173,7 @@ def get_backtest_plots_registry() -> Dict[str, Type[BacktestPlotBase]]:
     return _backtest_plots_registry.copy()
 
 
-def get_backtest_plot(plot_id: str) -> Optional[Type[BacktestPlotBase]]:
+def get_backtest_plot(plot_id: str) -> type[BacktestPlotBase] | None:
     """
     Get a specific backtest plot class by ID.
 
@@ -247,7 +250,7 @@ def create_plot_from_backtest(plot_id: str, backtest: BackTest) -> ChartType:
     forecasts_df: pd.DataFrame = flat_data.forecasts  # type: ignore[assignment]
 
     # Get historical observations if the plot needs them
-    historical_df: Optional[pd.DataFrame] = None
+    historical_df: pd.DataFrame | None = None
     if plot_cls.needs_historical and flat_data.historical_observations is not None:
         historical_df = flat_data.historical_observations  # type: ignore[assignment]
 
@@ -292,7 +295,7 @@ def create_plot_from_evaluation(plot_id: str, evaluation) -> ChartType:
     forecasts_df: pd.DataFrame = flat_data.forecasts  # type: ignore[assignment]
 
     # Get historical observations if the plot needs them
-    historical_df: Optional[pd.DataFrame] = None
+    historical_df: pd.DataFrame | None = None
     if plot_cls.needs_historical and flat_data.historical_observations is not None:
         historical_df = flat_data.historical_observations  # type: ignore[assignment]
 
@@ -305,9 +308,11 @@ def create_plot_from_evaluation(plot_id: str, evaluation) -> ChartType:
 # Each plot file uses the @backtest_plot decorator which registers it
 def _discover_plots():
     """Import all plot modules to trigger decorator registration."""
-    from chap_core.assessment.backtest_plots import (  # noqa: F401
+    from chap_core.assessment.backtest_plots import (
         evaluation_plot,
+        horizon_location_grid,
         metrics_dashboard,
+        predicted_vs_actual_plot,
         sample_bias_plot,
     )
 

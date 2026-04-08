@@ -5,8 +5,6 @@ This module provides a backtest plot that shows various metrics by forecast
 horizon and time period.
 """
 
-from typing import Optional
-
 import altair as alt
 import pandas as pd
 
@@ -22,7 +20,7 @@ from chap_core.plotting.evaluation_plot import MetricByHorizonV2Mean, MetricByTi
 
 
 @backtest_plot(
-    id="metrics_dashboard",
+    plot_id="metrics_dashboard",
     name="Overview of various metrics by horizon/time",
     description="A dashboard showing various metrics by forecast horizon and time period.",
 )
@@ -35,7 +33,7 @@ class MetricsDashboard(BacktestPlotBase):
         self,
         observations: pd.DataFrame,
         forecasts: pd.DataFrame,
-        historical_observations: Optional[pd.DataFrame] = None,
+        historical_observations: pd.DataFrame | None = None,
     ) -> ChartType:
         """
         Generate and return the dashboard visualization.

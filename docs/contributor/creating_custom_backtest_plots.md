@@ -1,16 +1,16 @@
 # Creating Custom Backtest Plots
 
-This guide explains how to create custom visualizations for CHAP backtest results using the backtest plot plugin system.
+This guide explains how to create custom visualizations for Chap backtest results using the backtest plot plugin system.
 
 ## Overview
 
-Backtest plots are visualizations that display forecast evaluation results. CHAP provides a plugin system that allows you to create custom plots that integrate seamlessly with the evaluation workflow.
+Backtest plots are visualizations that display forecast evaluation results. Chap provides a plugin system that allows you to create custom plots that integrate seamlessly with the evaluation workflow.
 
 Each backtest plot:
 - Receives flat pandas DataFrames containing observations and forecasts
 - Returns an Altair chart
 - Is automatically registered and discoverable
-- **Is automatically available in the CHAP Modeling App** through the REST API once registered
+- **Is automatically available in the Chap Modeling App** through the REST API once registered
 
 ## Data Schemas
 
@@ -109,7 +109,7 @@ import pandas as pd
 from chap_core.assessment.backtest_plots import backtest_plot, BacktestPlotBase, ChartType
 
 @backtest_plot(
-    id="my_custom_plot",              # Unique identifier (used in APIs)
+    plot_id="my_custom_plot",              # Unique identifier (used in APIs)
     name="My Custom Plot",             # Human-readable display name
     description="Shows forecast accuracy by location.",
 )
@@ -137,7 +137,7 @@ from chap_core.assessment.backtest_plots import backtest_plot, BacktestPlotBase,
 
 
 @backtest_plot(
-    id="error_by_location",
+    plot_id="error_by_location",
     name="Error by Location",
     description="Shows mean absolute forecast error for each location.",
 )
@@ -199,9 +199,9 @@ The `@backtest_plot` decorator registers your plot class in a global registry wh
 2. Assigns the metadata (`id`, `name`, `description`, `needs_historical`) to the class
 3. Adds the class to the registry under its `id`
 
-### Making CHAP Discover Your Plot
+### Making Chap Discover Your Plot
 
-For CHAP to discover your plot at startup, you need to import your module in the `_discover_plots()` function in `chap_core/assessment/backtest_plots/__init__.py`:
+For Chap to discover your plot at startup, you need to import your module in the `_discover_plots()` function in `chap_core/assessment/backtest_plots/__init__.py`:
 
 ```console
 def _discover_plots():
@@ -283,9 +283,9 @@ To see all available plot types:
 chap plot-backtest --help
 ```
 
-### Automatic Integration with CHAP Modeling App
+### Automatic Integration with Chap Modeling App
 
-Once your plot is registered in CHAP, it becomes **automatically available in the CHAP Modeling App** through the REST API. Users of the modeling app will be able to select your plot from the available visualization options when viewing backtest results.
+Once your plot is registered in Chap, it becomes **automatically available in the Chap Modeling App** through the REST API. Users of the modeling app will be able to select your plot from the available visualization options when viewing backtest results.
 
 The REST API exposes your plot through these endpoints:
 
@@ -311,7 +311,7 @@ import pandas as pd
 from chap_core.assessment.backtest_plots import backtest_plot, BacktestPlotBase, ChartType
 
 @backtest_plot(
-    id="trend_plot",
+    plot_id="trend_plot",
     name="Trend Plot",
     description="Shows forecasts with historical trend context.",
     needs_historical=True,  # Request historical data
@@ -380,7 +380,7 @@ Study these existing implementations as examples:
 
 ```console
 @backtest_plot(
-    id: str,                    # Required: Unique identifier
+    plot_id: str,                    # Required: Unique identifier
     name: str,                  # Required: Display name
     description: str = "",      # Optional: Description
     needs_historical: bool = False,  # Optional: Request historical data

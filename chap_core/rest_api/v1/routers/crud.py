@@ -17,7 +17,7 @@ Magic is used to make the returned objects camelCase while internal objects are 
 import json
 import logging
 from functools import partial
-from typing import Annotated, Any, List, Optional
+from typing import Annotated, Any
 
 import numpy as np
 from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile
@@ -49,13 +49,6 @@ from chap_core.database.model_templates_and_config_tables import (
 from chap_core.database.tables import BackTest, Prediction, PredictionInfo
 from chap_core.datatypes import FullData, HealthPopulationData
 from chap_core.geometry import Polygons
-from chap_core.models.approved_templates import (
-    ApprovedTemplate,
-    get_approved_templates,
-    get_git_ref,
-    is_approved,
-)
-from chap_core.models.model_template import ExternalModelTemplate
 from chap_core.rest_api.celery_tasks import CeleryPool
 from chap_core.spatio_temporal_data.converters import observations_to_dataset
 
@@ -64,7 +57,7 @@ from .dependencies import get_database_url, get_session, get_settings
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/crud", tags=["crud"])
+router = APIRouter(prefix="/crud")
 
 router_get = partial(router.get, response_model_by_alias=True)  # MAGIC!: This makes the endpoints return camelCase
 worker: CeleryPool[Any] = CeleryPool()
@@ -74,7 +67,7 @@ worker: CeleryPool[Any] = CeleryPool()
 # backtests
 
 
-@router.get("/backtests", response_model=list[BackTestRead])  # This should be called list
+@router.get("/backtests", response_model=list[BackTestRead], tags=["Backtests"])  # This should be called list
 async def get_backtests(session: Session = Depends(get_session)):
     """
     Returns a list of backtests/evaluations with only the id and name
@@ -88,7 +81,7 @@ async def get_backtests(session: Session = Depends(get_session)):
     return backtests
 
 
-@router_get("/backtests/{backtestId}/full", response_model=BackTest)
+@router_get("/backtests/{backtestId}/full", response_model=BackTest, tags=["Backtests"])
 async def get_backtest(backtest_id: Annotated[int, Path(alias="backtestId")], session: Session = Depends(get_session)):
     backtest = session.get(BackTest, backtest_id)
     if backtest is None:
@@ -96,7 +89,7 @@ async def get_backtest(backtest_id: Annotated[int, Path(alias="backtestId")], se
     return backtest
 
 
-@router_get("/backtests/{backtestId}/info", response_model=BackTestRead)
+@router_get("/backtests/{backtestId}/info", response_model=BackTestRead, tags=["Backtests"])
 def get_backtest_info(backtest_id: Annotated[int, Path(alias="backtestId")], session: Session = Depends(get_session)):
     backtest = session.exec(
         select(BackTest)
@@ -115,14 +108,14 @@ class BackTestUpdate(DBModel):
     name: str | None = None
 
 
-@router.post("/backtests", response_model=JobResponse)
+@router.post("/backtests", response_model=JobResponse, tags=["Backtests"])
 async def create_backtest(backtest: BackTestCreate, database_url: str = Depends(get_database_url)):
     job = worker.queue_db(wf.run_backtest, backtest, database_url=database_url)
 
     return JobResponse(id=job.id)
 
 
-@router.delete("/backtests/{backtestId}")
+@router.delete("/backtests/{backtestId}", tags=["Backtests"])
 async def delete_backtest(
     backtest_id: Annotated[int, Path(alias="backtestId")], session: Session = Depends(get_session)
 ):
@@ -134,7 +127,7 @@ async def delete_backtest(
     return {"message": "deleted"}
 
 
-@router.patch("/backtests/{backtestId}", response_model=BackTestRead)
+@router.patch("/backtests/{backtestId}", response_model=BackTestRead, tags=["Backtests"])
 async def update_backtest(
     backtest_id: Annotated[int, Path(alias="backtestId")],
     backtest_update: BackTestUpdate,
@@ -163,7 +156,7 @@ async def update_backtest(
     return db_backtest
 
 
-@router.delete("/backtests")
+@router.delete("/backtests", tags=["Backtests"])
 async def delete_backtest_batch(ids: Annotated[str, Query(alias="ids")], session: Session = Depends(get_session)):
     deleted_count = 0
     backtest_ids_list = []
@@ -188,7 +181,7 @@ async def delete_backtest_batch(ids: Annotated[str, Query(alias="ids")], session
         except ValueError:
             raise HTTPException(
                 status_code=400, detail=f"Invalid ID format: '{stripped_id_str}' is not a valid integer in '{ids}'."
-            )
+            ) from None
 
     for backtest_id in backtest_ids_list:
         backtest = session.get(BackTest, backtest_id)
@@ -209,7 +202,7 @@ class PredictionCreate(DBModel):
     n_periods: int
 
 
-@router.get("/predictions", response_model=list[PredictionInfo])
+@router.get("/predictions", response_model=list[PredictionInfo], tags=["Predictions"])
 async def get_predictions(session: Session = Depends(get_session)):
     session_wrapper = SessionWrapper(session=session)
     return [
@@ -217,7 +210,7 @@ async def get_predictions(session: Session = Depends(get_session)):
     ]
 
 
-@router.get("/predictions/{predictionId}", response_model=PredictionInfo)
+@router.get("/predictions/{predictionId}", response_model=PredictionInfo, tags=["Predictions"])
 async def get_prediction(
     prediction_id: Annotated[int, Path(alias="predictionId")], session: Session = Depends(get_session)
 ):
@@ -227,12 +220,12 @@ async def get_prediction(
     return prediction
 
 
-@router.post("/predictions", response_model=JobResponse)
+@router.post("/predictions", response_model=JobResponse, tags=["Predictions"])
 async def create_prediction(prediction: PredictionCreate):
     raise HTTPException(status_code=501, detail="Not implemented")
 
 
-@router.delete("/predictions/{predictionId}")
+@router.delete("/predictions/{predictionId}", tags=["Predictions"])
 async def delete_prediction(
     prediction_id: Annotated[int, Path(alias="predictionId")], session: Session = Depends(get_session)
 ):
@@ -253,17 +246,17 @@ class DataBaseResponse(DBModel):
 
 
 class DatasetCreate(DataSetCreateInfo):
-    observations: List[ObservationBase]
+    observations: list[ObservationBase]
     geojson: FeatureCollectionModel
 
 
-@router.get("/datasets", response_model=list[DataSetInfo])
+@router.get("/datasets", response_model=list[DataSetInfo], tags=["Datasets"])
 async def get_datasets(session: Session = Depends(get_session)):
     datasets = session.exec(select(DataSet)).all()
     return datasets
 
 
-@router.get("/datasets/{datasetId}", response_model=DataSetWithObservations)
+@router.get("/datasets/{datasetId}", response_model=DataSetWithObservations, tags=["Datasets"])
 async def get_dataset(dataset_id: Annotated[int, Path(alias="datasetId")], session: Session = Depends(get_session)):
     # dataset = session.exec(select(DataSet).where(DataSet.id == dataset_id)).first()
     dataset = session.get(DataSet, dataset_id)
@@ -275,7 +268,7 @@ async def get_dataset(dataset_id: Annotated[int, Path(alias="datasetId")], sessi
     return dataset
 
 
-@router.post("/datasets")
+@router.post("/datasets", tags=["Datasets"])
 async def create_dataset(
     data: DatasetCreate, datababase_url=Depends(get_database_url), worker_settings=Depends(get_settings)
 ) -> JobResponse:
@@ -291,7 +284,7 @@ async def create_dataset(
     return JobResponse(id=job.id)
 
 
-@router.post("/datasets/csvFile")
+@router.post("/datasets/csvFile", tags=["Datasets"])
 async def create_dataset_csv(
     csv_file: UploadFile = File(...),
     geojson_file: UploadFile = File(...),
@@ -309,7 +302,7 @@ async def create_dataset_csv(
     return DataBaseResponse(id=dataset_id)
 
 
-@router.get("/datasets/{datasetId}/df")
+@router.get("/datasets/{datasetId}/df", tags=["Datasets"])
 async def get_dataset_df(dataset_id: Annotated[int, Path(alias="datasetId")], session: Session = Depends(get_session)):
     # dataset = session.get(DataSet, dataset_id)
     # if dataset is None:
@@ -322,7 +315,7 @@ async def get_dataset_df(dataset_id: Annotated[int, Path(alias="datasetId")], se
     return df.to_dict(orient="records")
 
 
-@router.get("/datasets/{datasetId}/csv")
+@router.get("/datasets/{datasetId}/csv", tags=["Datasets"])
 async def get_dataset_csv(dataset_id: Annotated[int, Path(alias="datasetId")], session: Session = Depends(get_session)):
     sw = SessionWrapper(session=session)
     in_memory_dataset = sw.get_dataset(dataset_id)
@@ -337,7 +330,7 @@ async def get_dataset_csv(dataset_id: Annotated[int, Path(alias="datasetId")], s
     )
 
 
-@router.delete("/datasets/{datasetId}")
+@router.delete("/datasets/{datasetId}", tags=["Datasets"])
 async def delete_dataset(dataset_id: Annotated[int, Path(alias="datasetId")], session: Session = Depends(get_session)):
     # dataset = session.exec(select(DataSet).where(DataSet.id == dataset_id)).first()
     dataset = session.get(DataSet, dataset_id)
@@ -361,89 +354,26 @@ class ModelTemplateRead(DBModel, ModelTemplateInformation, ModelTemplateMetaData
     # TODO: should probably be moved somewhere else?
     name: str
     id: int
-    user_options: Optional[dict] = None
-    required_covariates: List[str] = []
-    version: Optional[str] = None
+    user_options: dict | None = None
+    required_covariates: list[str] = []
+    version: str | None = None
     archived: bool = False
 
 
-@router.get("/model-templates", response_model=list[ModelTemplateRead])
+@router.get("/model-templates", response_model=list[ModelTemplateRead], tags=["Models"])
 async def list_model_templates(session: Session = Depends(get_session)):
     """
     Lists all model templates from the db, including archived.
     """
-    model_templates = session.exec(
-        select(ModelTemplateDB)  # noqa: E712
-    ).all()
+    model_templates = session.exec(select(ModelTemplateDB)).all()
     return model_templates
-
-
-# Disabled for release - security review pending
-# @router.get("/model-templates/available", response_model=list[ApprovedTemplate])
-async def list_available_model_templates():
-    """
-    Lists whitelisted model templates that can be added.
-    Fetches from remote whitelist URLs configured in config/approved_model_repos.yaml.
-    """
-    return get_approved_templates()
-
-
-class ModelTemplateCreate(DBModel):
-    url: str
-    version: str
-
-
-# Disabled for release - security review pending
-# @router.post("/model-templates", response_model=ModelTemplateRead)
-async def add_model_template(
-    model_template_create: ModelTemplateCreate,
-    session: Session = Depends(get_session),
-):
-    """
-    Add a model template from a whitelisted GitHub URL.
-    The url+version must be in the approved whitelist.
-    """
-    approved = get_approved_templates()
-    if not is_approved(model_template_create.url, model_template_create.version, approved):
-        raise HTTPException(status_code=403, detail="Model template not in approved list")
-
-    git_ref = get_git_ref(model_template_create.url, model_template_create.version, approved)
-    full_url = f"{model_template_create.url}{git_ref}"
-    try:
-        config = ExternalModelTemplate.fetch_config_from_github_url(full_url)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch from GitHub: {e}")
-
-    config.version = model_template_create.version
-
-    session_wrapper = SessionWrapper(session=session)
-    template_id = session_wrapper.add_model_template_from_yaml_config(config)
-    return session.get(ModelTemplateDB, template_id)
-
-
-# Disabled for release - security review pending
-# @router.delete("/model-templates/{modelTemplateId}")
-async def delete_model_template(
-    model_template_id: Annotated[int, Path(alias="modelTemplateId")],
-    session: Session = Depends(get_session),
-):
-    """
-    Soft delete a model template by setting archived to True.
-    """
-    model_template = session.get(ModelTemplateDB, model_template_id)
-    if model_template is None:
-        raise HTTPException(status_code=404, detail="Model template not found")
-    model_template.archived = True
-    session.add(model_template)
-    session.commit()
-    return {"message": "deleted"}
 
 
 ###########
 # configured models
 
 
-@router.get("/configured-models", response_model=list[ModelSpecRead])
+@router.get("/configured-models", response_model=list[ModelSpecRead], tags=["Models"])
 def list_configured_models(session: Session = Depends(get_session)):
     """List all configured models from the db"""
     configured_models_read = SessionWrapper(session=session).get_configured_models()
@@ -455,11 +385,11 @@ def list_configured_models(session: Session = Depends(get_session)):
 class ModelConfigurationCreate(DBModel):
     name: str
     model_template_id: int
-    user_option_values: Optional[dict] = None
-    additional_continuous_covariates: List[str] = []
+    user_option_values: dict | None = None
+    additional_continuous_covariates: list[str] = []
 
 
-@router.post("/configured-models", response_model=ConfiguredModelDB)
+@router.post("/configured-models", response_model=ConfiguredModelDB, tags=["Models"])
 def add_configured_model(
     model_configuration: ModelConfigurationCreate,
     session: Session = Depends(get_session),
@@ -469,12 +399,12 @@ def add_configured_model(
     model_template_id = model_configuration.model_template_id
     configuration_name = model_configuration.name
     db_id = session_wrapper.add_configured_model(
-        model_template_id, ModelConfiguration(**model_configuration.dict()), configuration_name
+        model_template_id, ModelConfiguration(**model_configuration.model_dump()), configuration_name
     )
     return session.get(ConfiguredModelDB, db_id)
 
 
-@router.delete("/configured-models/{configuredModelId}")
+@router.delete("/configured-models/{configuredModelId}", tags=["Models"])
 async def delete_configured_model(
     configured_model_id: Annotated[int, Path(alias="configuredModelId")], session: Session = Depends(get_session)
 ):
@@ -492,13 +422,13 @@ async def delete_configured_model(
 # models (alias for configured models)
 
 
-@router.get("/models", response_model=list[ModelSpecRead])
+@router.get("/models", response_model=list[ModelSpecRead], tags=["Models"])
 def list_models(session: Session = Depends(get_session)):
     """List all models from the db (alias for configured models)"""
     return list_configured_models(session)
 
 
-@router.post("/models", response_model=ConfiguredModelDB)
+@router.post("/models", response_model=ConfiguredModelDB, tags=["Models"])
 def add_model(
     model_configuration: ModelConfigurationCreate,
     session: Session = Depends(get_session),
@@ -511,13 +441,13 @@ def add_model(
 # other misc
 
 
-@router.post("/debug")
+@router.post("/debug", tags=["Debug"])
 async def debug_entry(database_url: str = Depends(get_database_url)) -> JobResponse:
     job = worker.queue_db(wf.debug, database_url=database_url)
     return JobResponse(id=job.id)
 
 
-@router.get("/debug/{debugId}")
+@router.get("/debug/{debugId}", tags=["Debug"])
 async def get_debug_entry(
     debug_id: Annotated[int, Path(alias="debugId")], session: Session = Depends(get_session)
 ) -> DebugEntry:

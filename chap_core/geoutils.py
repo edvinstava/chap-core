@@ -26,6 +26,8 @@ def feature_bbox(feature: FeatureModel):
         A 4-tuple in the form of (xmin,ymin,xmax,ymax)
     """
     geom = feature.geometry
+    if geom is None:
+        raise ValueError("Feature has no geometry")
 
     geotype = geom.type
     coords: Any = geom.coordinates
@@ -34,7 +36,7 @@ def feature_bbox(feature: FeatureModel):
         x, y = coords
         bbox = [x, y, x, y]
     elif geotype in ("MultiPoint", "LineString"):
-        xs, ys = zip(*coords)
+        xs, ys = zip(*coords, strict=False)
         bbox = [min(xs), min(ys), max(xs), max(ys)]
     elif geotype == "MultiLineString":
         xs = [x for line in coords for x, y in line]  # type: ignore[assignment]
@@ -42,7 +44,7 @@ def feature_bbox(feature: FeatureModel):
         bbox = [min(xs), min(ys), max(xs), max(ys)]
     elif geotype == "Polygon":
         exterior = coords[0]
-        xs, ys = zip(*exterior)
+        xs, ys = zip(*exterior, strict=False)
         bbox = [min(xs), min(ys), max(xs), max(ys)]
     elif geotype == "MultiPolygon":
         xs = [x for poly in coords for x, y in poly[0]]  # type: ignore[assignment]
@@ -98,7 +100,7 @@ def buffer_point_features(collection: FeatureCollectionModel, distance: float):
     """
     features = []
     for feature in collection.features:
-        if "Point" in feature.geometry.type:
+        if feature.geometry is not None and "Point" in feature.geometry.type:
             if not distance:
                 raise ValueError(
                     f"Attempting to buffer point geometries but the buffer distance arg is 0 or None: {distance}"

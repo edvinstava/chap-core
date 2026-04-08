@@ -73,10 +73,10 @@ def get_naive_model_template():
 
 
 def seed_configured_models_from_config_dir(
-    session, dir=get_config_path() / "configured_models", skip_chapkit_models=False
+    session, directory=get_config_path() / "configured_models", skip_chapkit_models=False
 ):
     wrapper = SessionWrapper(session=session)
-    configured_models = parse_local_model_config_from_directory(dir)
+    configured_models = parse_local_model_config_from_directory(directory)
     for config in configured_models:
         if config.uses_chapkit:
             if skip_chapkit_models:
@@ -109,8 +109,7 @@ def seed_configured_models_from_config_dir(
             # find latest version in yaml, add that as a model template before for loop
             version, version_commit_or_branch = list(config.versions.items())[-1]
             version_commit_or_branch = version_commit_or_branch.strip("@")
-            if config.url.endswith("/"):
-                config.url = config.url[:-1]
+            config.url = config.url.removesuffix("/")
 
             version_url = f"{config.url}@{version_commit_or_branch}"
             template_id = add_model_template_from_url(version_url, wrapper, version)

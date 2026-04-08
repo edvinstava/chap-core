@@ -1,8 +1,10 @@
 import functools
+import itertools
 import logging
+from collections.abc import Iterable
 from datetime import datetime
 from numbers import Number  # Still needed for clean_timestring
-from typing import TYPE_CHECKING, Iterable, Tuple, Union, overload
+from typing import TYPE_CHECKING, overload
 
 import dateutil
 import numpy as np
@@ -16,7 +18,7 @@ from pytz import utc
 from chap_core.exceptions import InvalidDateError
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
+    from typing import Self
 
 logger = logging.getLogger(__name__)
 
@@ -119,25 +121,25 @@ class TimePeriod:
         return datetime(int(year), int(month), int(day))
 
     @classmethod
-    def from_id(cls, id: str):
-        if len(id) == 4:
-            return Year(int(id))
+    def from_id(cls, period_id: str):
+        if len(period_id) == 4:
+            return Year(int(period_id))
         # Handle new format: YYYY-Snn (Sunday-start)
-        if "-S" in id:
-            return Week(*map(int, id.split("-S")), iso_day=7)
+        if "-S" in period_id:
+            return Week(*map(int, period_id.split("-S")), iso_day=7)
         # Handle new format: YYYY-Wnn (Monday-start)
-        if "-W" in id:
-            return Week(*map(int, id.split("-W")))
+        if "-W" in period_id:
+            return Week(*map(int, period_id.split("-W")))
         # Handle old format: YYYYSunWnn (Sunday-start)
-        if "SunW" in id:
-            return Week(*map(int, id.split("SunW")), iso_day=7)
+        if "SunW" in period_id:
+            return Week(*map(int, period_id.split("SunW")), iso_day=7)
         # Handle old format: YYYYWnn (Monday-start)
-        if "W" in id:
-            return Week(*map(int, id.split("W")))
-        elif len(id) == 6:
-            return Month(int(id[:4]), int(id[4:]))
-        elif len(id) == 8:
-            return Day(int(id[:4]), int(id[4:6]), int(id[6:]))
+        if "W" in period_id:
+            return Week(*map(int, period_id.split("W")))
+        elif len(period_id) == 6:
+            return Month(int(period_id[:4]), int(period_id[4:]))
+        elif len(period_id) == 8:
+            return Day(int(period_id[:4]), int(period_id[4:6]), int(period_id[6:]))
 
     @property
     def id(self):
@@ -198,6 +200,7 @@ class TimePeriod:
 
     @classmethod
     def parse(cls, text_repr: str):
+        text_repr = str(text_repr)
         # Handle week formats (old: W, SunW; new: -W, -S)
         if "W" in text_repr or "/" in text_repr or "-S" in text_repr:
             return cls.parse_week(text_repr)
@@ -276,7 +279,7 @@ class Day(TimePeriod):
 
 class WeekNumbering:
     @staticmethod
-    def get_week_info(date: datetime) -> Tuple[int, int, int]:
+    def get_week_info(date: datetime) -> tuple[int, int, int]:
         return date.isocalendar()
 
     @staticmethod
@@ -431,20 +434,20 @@ class TimeDelta(DateUtilWrapper):
     def __eq__(self, other):
         return self._relative_delta == other._relative_delta
 
-    def __add__(self, other: Union[TimeStamp, TimePeriod]):
+    def __add__(self, other: TimeStamp | TimePeriod):
         if not isinstance(other, (TimeStamp, TimePeriod)):
             return NotImplemented
         return other.__class__(other._date + self._relative_delta)
 
-    def __radd__(self, other: Union[TimeStamp, TimePeriod]):
+    def __radd__(self, other: TimeStamp | TimePeriod):
         return self.__add__(other)
 
-    def __sub__(self, other: Union[TimeStamp, TimePeriod]):
+    def __sub__(self, other: TimeStamp | TimePeriod):
         if not isinstance(other, (TimeStamp, TimePeriod)):
             return NotImplemented
         return other.__class__(other._date - self._relative_delta)
 
-    def __rsub__(self, other: Union[TimeStamp, TimePeriod]):
+    def __rsub__(self, other: TimeStamp | TimePeriod):
         return self.__sub__(other)
 
     def __mul__(self, other: int):
@@ -544,7 +547,9 @@ class PeriodRange(BNPDataClass):
     def _vectorize(self, funcname: str, other: TimePeriod) -> NDArray[np.bool_]:
         if isinstance(other, PeriodRange):
             assert len(self) == len(other), (len(self), len(other), self, other)
-            return np.array([getattr(period, funcname)(other_period) for period, other_period in zip(self, other)])
+            return np.array(
+                [getattr(period, funcname)(other_period) for period, other_period in zip(self, other, strict=False)]
+            )
         return np.array([getattr(period, funcname)(other) for period in self])
 
     def __ne__(self, other: TimePeriod) -> NDArray[np.bool_]:  # type: ignore[override]
@@ -571,12 +576,19 @@ class PeriodRange(BNPDataClass):
     def __iter__(self):
         return (self._period_class((self._start_timestamp + self._time_delta * i)._date) for i in range(len(self)))
 
-    def __getitem__(self, item: slice | int):
+    @overload
+    def __getitem__(self, item: int | np.integer) -> "Day | Month | Year | Week": ...
+
+    @overload
+    def __getitem__(self, item: slice) -> "PeriodRange": ...
+
+    def __getitem__(self, item: slice | int | np.integer):
         """Slice by numeric index in the period range"""
         if isinstance(item, (int, np.integer)):
-            if item < 0:
-                item += len(self)
-            return self._period_class((self._start_timestamp + self._time_delta * item)._date)
+            index = int(item)
+            if index < 0:
+                index += len(self)
+            return self._period_class((self._start_timestamp + self._time_delta * index)._date)
         assert item.step is None
         start = self._start_timestamp
         end = self._end_timestamp
@@ -636,7 +648,7 @@ class PeriodRange(BNPDataClass):
     def _check_consequtive(cls, time_delta, time_periods, fill_missing=False):
         # if time_delta == delta_week:
         # return cls._check_consequtive_weeks(time_periods, fill_missing)
-        is_consec = [p2 == p1 + time_delta for p1, p2 in zip(time_periods, time_periods[1:])]
+        is_consec = [p2 == p1 + time_delta for p1, p2 in itertools.pairwise(time_periods)]
         if not all(is_consec):
             if fill_missing:
                 indices = [(p - time_periods[0]) // time_delta for p in time_periods][:-1]
@@ -644,12 +656,6 @@ class PeriodRange(BNPDataClass):
                 mask[indices] = False
                 return np.flatnonzero(mask)
 
-            print(f"Periods {time_periods}")
-            mask = ~np.array(list(is_consec))
-            print(mask)
-            for wrong in np.flatnonzero(mask):
-                print(f"Wrong period {time_periods[wrong], time_periods[wrong + 1]} with time delta {time_delta}")
-                print(time_periods[wrong] + time_delta, time_periods[wrong + 1])
             raise ValueError("Periods must be consecutive.")
         return []
 
@@ -674,7 +680,7 @@ class PeriodRange(BNPDataClass):
 
     @classmethod
     def from_ids(cls, ids: Iterable[str], fill_missing=False):
-        periods = [TimePeriod.from_id(id) for id in ids]
+        periods = [TimePeriod.from_id(period_id) for period_id in ids]
         return cls.from_period_list(fill_missing, periods)
 
     @classmethod

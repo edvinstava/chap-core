@@ -5,8 +5,6 @@ This module provides a backtest plot that shows the ratio of forecast samples
 above truth by horizon distance and time period.
 """
 
-from typing import Optional
-
 import altair as alt
 import pandas as pd
 
@@ -17,7 +15,7 @@ from chap_core.plotting.backtest_plot import text_chart
 
 
 @backtest_plot(
-    id="ratio_of_samples_above_truth",
+    plot_id="ratio_of_samples_above_truth",
     name="Sample Bias Plot",
     description="Backtest plot showing forecast bias relative to observations.",
 )
@@ -35,7 +33,7 @@ class SampleBiasPlot(BacktestPlotBase):
         self,
         observations: pd.DataFrame,
         forecasts: pd.DataFrame,
-        historical_observations: Optional[pd.DataFrame] = None,
+        historical_observations: pd.DataFrame | None = None,
     ) -> ChartType:
         """
         Generate and return the dashboard visualization.

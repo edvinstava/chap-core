@@ -1,5 +1,5 @@
 import abc
-from typing import Optional, Type, cast
+from typing import cast
 
 import altair as alt
 import pandas as pd
@@ -20,7 +20,7 @@ class MetricPlotV2(abc.ABC):
 
     visualization_info: "VisualizationInfo"  # Declared by subclasses
 
-    def __init__(self, metric_data: pd.DataFrame, geojson: Optional[dict] = None):
+    def __init__(self, metric_data: pd.DataFrame, geojson: dict | None = None):
         self._metric_data = metric_data
 
     def plot(self, title="Mean metric by horizon") -> alt.Chart:
@@ -53,7 +53,7 @@ class MetricByHorizonAndLocationMean(MetricPlotV2):
         adf = df.groupby(["horizon_distance", "location"]).agg({"metric": "mean"}).reset_index()
         print(adf)
         chart = cast(
-            alt.Chart,
+            "alt.Chart",
             alt.Chart(adf)
             .mark_bar(point=True)
             .encode(
@@ -101,7 +101,7 @@ class MetricByHorizonV2Sum(MetricPlotV2):
     def plot_from_df(self, title: str = "Samples above truth by horizon") -> alt.Chart:
         df = self._metric_data
         chart = cast(
-            alt.Chart,
+            "alt.Chart",
             alt.Chart(df)
             .mark_bar()
             .encode(
@@ -129,7 +129,7 @@ class MetricByTimePeriodAndLocationV2Mean(MetricPlotV2):
         df = self._metric_data
         adf = df.groupby(["time_period", "location"]).agg({"metric": "mean"}).reset_index()
         chart = cast(
-            alt.Chart,
+            "alt.Chart",
             alt.Chart(adf)
             .mark_line(point=True)
             .encode(
@@ -154,7 +154,7 @@ class MetricByTimePeriodV2Sum(MetricPlotV2):
     def plot_from_df(self, title: str = "Samples above truth by time period") -> alt.Chart:
         df = self._metric_data
         chart = cast(
-            alt.Chart,
+            "alt.Chart",
             alt.Chart(df)
             .mark_line()
             .encode(
@@ -204,7 +204,7 @@ class MetricMapV2(MetricPlotV2):
         id="metric_map", display_name="Map", description="Shows a map of aggregated metrics per org unit"
     )
 
-    def __init__(self, metric_data: pd.DataFrame, geojson: Optional[dict] = None):
+    def __init__(self, metric_data: pd.DataFrame, geojson: dict | None = None):
         super().__init__(metric_data, geojson)
         self._geojson = geojson
 
@@ -223,7 +223,7 @@ class MetricMapV2(MetricPlotV2):
 
         # Build Altair map chart
         chart = cast(
-            alt.Chart,
+            "alt.Chart",
             alt.Chart(alt.Data(values=geojson_data["features"]))
             .mark_geoshape(stroke="black", strokeWidth=0.5)
             .encode(
@@ -241,7 +241,7 @@ class MetricMapV2(MetricPlotV2):
 
 
 def make_plot_from_backtest_object(
-    backtest: BackTest, plotting_class: Type[MetricPlotV2], metric: Metric, geojson: Optional[dict] = None
+    backtest: BackTest, plotting_class: type[MetricPlotV2], metric: Metric, geojson: dict | None = None
 ) -> dict:
     # Convert to flat representation using Evaluation abstraction
     evaluation = Evaluation.from_backtest(backtest)

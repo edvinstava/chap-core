@@ -1,11 +1,10 @@
-import dataclasses
-from typing import Any, Callable, Generic, Protocol, TypeVar
+from collections.abc import Callable
+from typing import Protocol, TypeVar
 
-ReturnType_co = TypeVar("ReturnType_co", covariant=True)
 ReturnType = TypeVar("ReturnType")
 
 
-class Job(Generic[ReturnType_co], Protocol):
+class Job[ReturnType_co](Protocol):
     @property
     def status(self) -> str: ...
 
@@ -24,17 +23,5 @@ class Job(Generic[ReturnType_co], Protocol):
     def is_finished(self) -> bool: ...
 
 
-@dataclasses.dataclass
-class SeededJob:
-    status: str = "ready"
-    result: Any = None
-    is_finished: bool = True
-    progress: float = 1.0
-    exception_info: str = ""
-
-    def cancel(self) -> None:
-        pass
-
-
-class Worker(Generic[ReturnType], Protocol):
+class Worker[ReturnType](Protocol):
     def queue(self, func: Callable[..., ReturnType], *args, **kwargs) -> Job[ReturnType]: ...

@@ -3,7 +3,7 @@
 import logging
 import warnings
 from pathlib import Path
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal
 
 import pandas as pd
 import yaml
@@ -19,6 +19,7 @@ from chap_core.cli_endpoints._common import (
     get_model,
     load_dataset,
     load_dataset_from_csv,
+    resolve_csv_path,
     save_results,
 )
 from chap_core.database.model_templates_and_config_tables import ModelConfiguration
@@ -34,6 +35,7 @@ from chap_core.hpo.searcher import RandomSearcher
 from chap_core.log_config import initialize_logging
 from chap_core.models.external_model import ExternalModel
 from chap_core.models.model_template import ModelTemplate
+from chap_core.models.utils import CHAP_RUNS_DIR
 from chap_core.predictor import ModelType
 from chap_core.spatio_temporal_data.multi_country_dataset import MultiCountryDataSet
 from chap_core.spatio_temporal_data.temporal_dataclass import DataSet
@@ -43,22 +45,22 @@ logger = logging.getLogger(__name__)
 
 def evaluate_hpo(
     model_name: ModelType | str,
-    dataset_name: Optional[DataSetType] = None,
-    dataset_country: Optional[str] = None,
-    dataset_csv: Optional[Path] = None,
-    polygons_json: Optional[Path] = None,
-    polygons_id_field: Optional[str] = "id",
+    dataset_name: DataSetType | None = None,
+    dataset_country: str | None = None,
+    dataset_csv: Path | None = None,
+    polygons_json: Path | None = None,
+    polygons_id_field: str | None = "id",
     prediction_length: int = 3,
     n_splits: int = 7,
-    report_filename: Optional[str] = str(get_temp_dir() / "report.pdf"),
+    report_filename: str | None = str(get_temp_dir() / "report.pdf"),
     ignore_environment: bool = False,
     debug: bool = False,
-    log_file: Optional[str] = None,
-    run_directory_type: Optional[Literal["latest", "timestamp", "use_existing"]] = "timestamp",
-    model_configuration_yaml: Optional[str] = None,
-    metric: Optional[str] = "MSE",
+    log_file: str | None = None,
+    run_directory_type: Literal["latest", "timestamp", "use_existing"] | None = "timestamp",
+    model_configuration_yaml: str | None = None,
+    metric: str | None = "MSE",
     direction: Direction = "minimize",
-    do_hpo: Optional[bool] = True,
+    do_hpo: bool | None = True,
 ):
     """
     Same as evaluate, but has three added arguments and a if check on argument do_hpo.
@@ -102,10 +104,10 @@ def evaluate_hpo(
     logging.info(f"Model configuration: {model_configuration_yaml_list}")
 
     results_dict = {}
-    for name, configuration in zip(model_list, model_configuration_yaml_list):
+    for name, configuration in zip(model_list, model_configuration_yaml_list, strict=False):
         template = ModelTemplate.from_directory_or_github_url(
             name,
-            base_working_dir=Path("./runs/"),
+            base_working_dir=CHAP_RUNS_DIR,
             ignore_env=ignore_environment,
             run_dir_type=run_directory_type,
         )
@@ -122,7 +124,7 @@ def evaluate_hpo(
         else:
             if configuration is not None:
                 logger.info(f"Loading model configuration from yaml file {configuration}")
-                with open(configuration, "r", encoding="utf-8") as f:
+                with open(configuration, encoding="utf-8") as f:
                     configs = yaml.safe_load(f)
                 if not isinstance(configs, dict) or not configs:
                     raise ValueError("YAML must define a non-empty mapping of parameters")
@@ -167,11 +169,9 @@ def evaluate_hpo(
     first_model = True
     for key, value in results_dict.items():
         aggregate_metric_dist = value[0]
-        row = [key]
-        for k, v in aggregate_metric_dist.items():
-            row.append(v)
+        row = [key, *aggregate_metric_dist.values()]
         if first_model:
-            data.append(["Model"] + list(aggregate_metric_dist.keys()))
+            data.append(["Model", *list(aggregate_metric_dist.keys())])
             first_model = False
         data.append(row)
     dataframe = pd.DataFrame(data)
@@ -186,19 +186,19 @@ def evaluate_hpo(
 
 def evaluate(
     model_name: ModelType | str,
-    dataset_name: Optional[DataSetType] = None,
-    dataset_country: Optional[str] = None,
-    dataset_csv: Optional[Path] = None,
-    polygons_json: Optional[Path] = None,
-    polygons_id_field: Optional[str] = "id",
+    dataset_name: DataSetType | None = None,
+    dataset_country: str | None = None,
+    dataset_csv: Path | None = None,
+    polygons_json: Path | None = None,
+    polygons_id_field: str | None = "id",
     prediction_length: int = 6,
     n_splits: int = 7,
-    report_filename: Optional[str] = str(get_temp_dir() / "report.pdf"),
+    report_filename: str | None = str(get_temp_dir() / "report.pdf"),
     ignore_environment: bool = False,
     debug: bool = False,
-    log_file: Optional[str] = None,
-    run_directory_type: Optional[Literal["latest", "timestamp", "use_existing"]] = "timestamp",
-    model_configuration_yaml: Optional[str] = None,
+    log_file: str | None = None,
+    run_directory_type: Literal["latest", "timestamp", "use_existing"] | None = "timestamp",
+    model_configuration_yaml: str | None = None,
     is_chapkit_model: bool = False,
 ):
     """Deprecated: Use `eval` instead. Will be removed in v2.0."""
@@ -213,7 +213,7 @@ def evaluate(
     model_configuration_yaml_list, model_list = create_model_lists(model_configuration_yaml, model_name)
     logger.info(f"Model configuration: {model_configuration_yaml_list}")
     results_dict = {}
-    for name, configuration in zip(model_list, model_configuration_yaml_list):
+    for name, configuration in zip(model_list, model_configuration_yaml_list, strict=False):
         model = get_model(configuration, ignore_environment, is_chapkit_model, name, run_directory_type)
         assert isinstance(model, ExternalModel)
         model_info = model.model_information
@@ -258,9 +258,9 @@ def eval_cmd(
         ),
     ],
     dataset_csv: Annotated[
-        Path,
+        str,
         Parameter(
-            help="Path to CSV file containing disease data with columns: time_period, "
+            help="Path or URL to CSV file containing disease data with columns: time_period, "
             "location, disease_cases, and climate covariates (rainfall, temperature, etc.)"
         ),
     ],
@@ -284,7 +284,7 @@ def eval_cmd(
         ),
     ] = RunConfig(),
     model_configuration_yaml: Annotated[
-        Optional[Path],
+        Path | None,
         Parameter(help="Path to YAML file with model-specific configuration parameters"),
     ] = None,
     historical_context_years: Annotated[
@@ -295,12 +295,23 @@ def eval_cmd(
         ),
     ] = 6,
     data_source_mapping: Annotated[
-        Optional[Path],
+        Path | None,
         Parameter(
             help="Path to JSON file mapping model covariate names to CSV column names. "
             'Format: {"model_name": "csv_column"}. Example: {"rainfall": "precipitation_mm"}'
         ),
     ] = None,
+    dry_run: Annotated[
+        bool,
+        Parameter(
+            help="Write data files and print commands without executing the model. "
+            "Useful for debugging model inputs and verifying command formatting."
+        ),
+    ] = False,
+    plot: Annotated[
+        bool,
+        Parameter(help="Generate an evaluation plot (HTML) alongside the NetCDF output"),
+    ] = False,
 ):
     """Evaluate a model using backtesting and export results to NetCDF format.
 
@@ -339,8 +350,9 @@ def eval_cmd(
         with open(data_source_mapping) as f:
             column_mapping = json.load(f)
 
-    geojson_path = discover_geojson(dataset_csv)
-    dataset = load_dataset_from_csv(dataset_csv, geojson_path, column_mapping)
+    csv_path, url_geojson_path = resolve_csv_path(dataset_csv)
+    geojson_path = url_geojson_path or discover_geojson(csv_path)
+    dataset = load_dataset_from_csv(csv_path, geojson_path, column_mapping)
 
     configuration = None
     if model_configuration_yaml is not None:
@@ -350,10 +362,11 @@ def eval_cmd(
     logger.info(f"Loading model template from {model_name}")
     template = ModelTemplate.from_directory_or_github_url(
         model_name,
-        base_working_dir=Path("./runs/"),
+        base_working_dir=CHAP_RUNS_DIR,
         ignore_env=run_config.ignore_environment,
         run_dir_type=run_config.run_directory_type,
         is_chapkit_model=run_config.is_chapkit_model,
+        dry_run=dry_run,
     )
 
     with template:
@@ -391,6 +404,16 @@ def eval_cmd(
             f"Running backtest with {backtest_params.n_splits} splits, {backtest_params.n_periods} periods, stride {backtest_params.stride}"
         )
         logger.debug(f"Including {historical_context_years} years of historical context for plotting")
+
+        if dry_run:
+            from chap_core.assessment.prediction_evaluator import backtest
+
+            for _ in backtest(
+                estimator, dataset, backtest_params.n_periods, backtest_params.n_splits, backtest_params.stride
+            ):
+                pass
+            return
+
         evaluation = Evaluation.create(
             configured_model=configured_model_db,
             estimator=estimator,
@@ -410,6 +433,15 @@ def eval_cmd(
 
         logger.info(f"Evaluation complete. Results saved to {output_file}")
 
+        if plot:
+            from chap_core.assessment.backtest_plots import create_plot_from_evaluation
+
+            plot_path = output_file.with_suffix(".html")
+            logger.info(f"Generating evaluation plot to {plot_path}")
+            chart = create_plot_from_evaluation("evaluation_plot", evaluation)
+            chart.save(str(plot_path))
+            logger.info(f"Plot saved to {plot_path}")
+
 
 def evaluate2(
     model_name: Annotated[
@@ -420,9 +452,9 @@ def evaluate2(
         ),
     ],
     dataset_csv: Annotated[
-        Path,
+        str,
         Parameter(
-            help="Path to CSV file containing disease data with columns: time_period, "
+            help="Path or URL to CSV file containing disease data with columns: time_period, "
             "location, disease_cases, and climate covariates (rainfall, temperature, etc.)"
         ),
     ],
@@ -446,7 +478,7 @@ def evaluate2(
         ),
     ] = RunConfig(),
     model_configuration_yaml: Annotated[
-        Optional[Path],
+        Path | None,
         Parameter(help="Path to YAML file with model-specific configuration parameters"),
     ] = None,
     historical_context_years: Annotated[
@@ -457,7 +489,7 @@ def evaluate2(
         ),
     ] = 6,
     data_source_mapping: Annotated[
-        Optional[Path],
+        Path | None,
         Parameter(
             help="Path to JSON file mapping model covariate names to CSV column names. "
             'Format: {"model_name": "csv_column"}. Example: {"rainfall": "precipitation_mm"}'

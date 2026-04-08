@@ -1,6 +1,5 @@
 import json
 import logging
-from typing import Dict, Tuple
 
 import pooch
 import pycountry
@@ -70,7 +69,7 @@ country_codes_l = [
     "KHM",
     "SGP",
 ]
-country_codes = dict(zip(country_names, country_codes_l))
+country_codes = dict(zip(country_names, country_codes_l, strict=False))
 
 
 def normalize_name(name: str) -> str:
@@ -78,10 +77,10 @@ def normalize_name(name: str) -> str:
 
 
 def add_id(feature, admin_level=1, lookup_dict=None):
-    id = feature.properties[f"NAME_{admin_level}"]
+    feature_id = feature.properties[f"NAME_{admin_level}"]
     if lookup_dict:
-        id = lookup_dict[normalize_name(id)]
-    return DFeatureModel(**feature.model_dump(), id=id)
+        feature_id = lookup_dict[normalize_name(feature_id)]
+    return DFeatureModel(**feature.model_dump(), id=feature_id)
 
 
 def get_area_polygons(country: str, regions: list[str] | None = None, admin_level: int = 1) -> FeatureCollectionModel:
@@ -130,7 +129,10 @@ def get_area_polygons(country: str, regions: list[str] | None = None, admin_leve
 
 def get_country_data_file(country: str, level=1):
     real_name = country.capitalize()
-    country_code = pycountry.countries.get(name=real_name).alpha_3
+    country_obj = pycountry.countries.get(name=real_name)
+    if country_obj is None:
+        raise ValueError(f"Unknown country: {country}")
+    country_code = country_obj.alpha_3
     # country_code = country_codes[country.lower()]
     return get_data_file(country_code, level)
 
@@ -154,7 +156,7 @@ def get_country_data(country, admin_level) -> PFeatureCollectionModel:
 
 
 def get_all_data():
-    return ((country, get_country_data(country, admin_level=1)) for country in country_codes.keys())
+    return ((country, get_country_data(country, admin_level=1)) for country in country_codes)
 
 
 class Polygons:
@@ -168,8 +170,7 @@ class Polygons:
         return len(self._polygons.features)
 
     def __iter__(self):
-        for feat in self._polygons.features:
-            yield feat
+        yield from self._polygons.features
 
     @property
     def __geo_interface__(self):
@@ -184,7 +185,7 @@ class Polygons:
         from .geoutils import feature_bbox
 
         boxes = (feature_bbox(feat) for feat in self)
-        xmins, ymins, xmaxs, ymaxs = zip(*boxes)
+        xmins, ymins, xmaxs, ymaxs = zip(*boxes, strict=False)
         bbox = min(xmins), min(ymins), max(xmaxs), max(ymaxs)
         return bbox
 
@@ -195,7 +196,7 @@ class Polygons:
     def to_file(self, filename):
         json.dump(self.to_geojson(), open(filename, "w"))
 
-    def id_to_name_tuple_dict(self) -> Dict[str, Tuple[str, str]]:
+    def id_to_name_tuple_dict(self) -> dict[str, tuple[str, str]]:
         """Returns a dictionary with the id as key and a tuple with the name and parent as value"""
         lookup = {}
         for feat in self.feature_collection().features:
@@ -213,7 +214,7 @@ class Polygons:
 
     def get_predecessors_map(self, predecessors: list[str]):
         predecessors_set = set(predecessors)
-        map = {}
+        result = {}
         for feature in self._polygons.features:
             if feature.properties is None:
                 raise ValueError(f"Feature {feature.id} has no properties")
@@ -224,8 +225,8 @@ class Polygons:
                 raise ValueError(f"Feature {feature.id} has no parent in predecessors")
             if len(possible_parents) > 1:
                 raise ValueError(f"Feature {feature.id} has multiple parents in predecessors")
-            map[feature.id] = possible_parents[0]
-        return map
+            result[feature.id] = possible_parents[0]
+        return result
 
     def filter_locations(self, locations: list[str]):
         """

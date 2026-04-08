@@ -19,14 +19,14 @@ def forecast(model, dataset: DataSet, prediction_length: TimeDelta, graph=None):
     logger.info(f"Forecasting {prediction_length} months into the future")
     split_point = dataset.end_timestamp - prediction_length
     split_period = Month(split_point.year, split_point.month)
-    train_data, test_set, future_weather = train_test_split_with_weather(dataset, split_period)
+    train_data, _test_set, future_weather = train_test_split_with_weather(dataset, split_period)
     if graph is not None and hasattr(model, "set_graph"):
         model.set_graph(graph)
 
     model._num_warmup = 1000
     model._num_samples = 400
     model.train(train_data)
-    if False and hasattr(model, "diagnose"):
+    if False:
         model.diagnose()
     predictions = model.forecast(future_weather, 10, prediction_length)
     return predictions
