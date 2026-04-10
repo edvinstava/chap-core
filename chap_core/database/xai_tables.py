@@ -3,7 +3,7 @@ Database tables for XAI explanations.
 """
 
 import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship
@@ -18,15 +18,15 @@ class PredictionExplanationBase(DBModel):
     period: str
     method: str
     output_statistic: str = "median"
-    params: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-    result: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    params: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+    result: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     status: str = "completed"
-    error: Optional[str] = None
-    created: datetime.datetime = Field(default_factory=datetime.datetime.utcnow)
+    error: str | None = None
+    created: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc))
 
 
 class PredictionExplanation(PredictionExplanationBase, table=True):
-    id: Optional[int] = Field(primary_key=True, default=None)
+    id: int | None = Field(primary_key=True, default=None)
     prediction: Prediction = Relationship()
 
 

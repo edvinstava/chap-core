@@ -8,39 +8,9 @@ from chap_core.datatypes import create_tsdataclass
 from chap_core.spatio_temporal_data.temporal_dataclass import DataSet as _DataSet
 
 
-def _observation_rows_to_dicts(observations):
-    rows = []
-    for obs in observations:
-        if hasattr(obs, "model_dump"):
-            rows.append(obs.model_dump())
-        elif isinstance(obs, dict):
-            rows.append(obs)
-        else:
-            raise TypeError(f"Unsupported observation type: {type(obs)}")
-    return rows
-
-
 def observations_to_dataset(dataclass, observations, fill_missing=False):
-    if not observations:
-        raise ValueError(
-            "provided_data must contain at least one observation with orgUnit, period, featureName, and value."
-        )
-    dataframe = pd.DataFrame(_observation_rows_to_dicts(observations))
-    rename_map = {
-        "org_unit": "location",
-        "orgUnit": "location",
-        "period": "time_period",
-        "featureName": "feature_name",
-    }
-    dataframe = dataframe.rename(columns={k: v for k, v in rename_map.items() if k in dataframe.columns})
-    required = ("location", "time_period", "feature_name", "value")
-    missing = [c for c in required if c not in dataframe.columns]
-    if missing:
-        raise ValueError(
-            f"Observations are missing required fields: {missing}. "
-            f"Expected orgUnit/org_unit, period, featureName/feature_name, and value. "
-            f"Columns present: {list(dataframe.columns)}"
-        )
+    obs_dicts = [obs.model_dump() for obs in observations]
+    dataframe = pd.DataFrame(obs_dicts).rename(columns={"org_unit": "location", "period": "time_period"})
     dataframe = dataframe.set_index(["location", "time_period"])
     pivoted = dataframe.pivot(columns="feature_name", values="value").reset_index()
     new_dataset = _DataSet.from_pandas(pivoted, dataclass, fill_missing=fill_missing)

@@ -152,7 +152,7 @@ def _build_native_shap_metadata(native_shap: dict) -> dict:
             "global_by_method": {
                 "native_shap": {
                     "topFeatures": top_features,
-                    "computedAt": datetime.datetime.utcnow().isoformat(),
+                    "computedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     "nSamples": n_samples,
                     "stabilityScore": None,
                     "surrogateQuality": None,

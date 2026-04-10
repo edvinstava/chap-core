@@ -2,11 +2,11 @@ import calendar
 import logging
 import re
 from datetime import date
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 
-from chap_core.time_period.date_util_wrapper import Month, TimePeriod, Week, clean_timestring
+from chap_core.time_period.date_util_wrapper import Day, Month, TimePeriod, Week, clean_timestring
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,13 @@ _MONTH_HEAD_RE = re.compile(r"^(\d{4})[-/](\d{1,2})(?:[-/T\s]|$)")
 _DAY_HEAD_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 
 
-def _year_month_from_any(raw: Any) -> Optional[tuple[int, int]]:
+def _year_month_from_any(raw: Any) -> tuple[int, int] | None:
+    """Extract (year, month) from any period-like value, or return None if not parseable.
+
+    Handles pd.Period, pd.Timestamp, date objects, numpy scalars, integer YYYYMM values,
+    string representations (e.g. "202405", "2024-05", "2024-05-01"), and falls back to
+    pd.to_datetime for anything else.
+    """
     if raw is None:
         return None
     if isinstance(raw, pd.Period):
@@ -133,7 +139,7 @@ def _parse_row_period(raw: Any) -> Month | Week | None:
         return None
 
 
-def _target_signature(forecast_period: str) -> Optional[tuple[str, int, int]]:
+def _target_signature(forecast_period: str) -> tuple[str, int, int] | None:
     """Calendar period for covariates at this forecast id.
 
     For ``YYYYMM_k`` (monthly origin + horizon step k), the target calendar month is

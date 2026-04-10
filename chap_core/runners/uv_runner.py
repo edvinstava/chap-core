@@ -23,13 +23,6 @@ class UvRunner(Runner):
         # This prevents UV from trying to install packages into the main application's venv.
         env = os.environ.copy()
         env["UV_PROJECT_ENVIRONMENT"] = str(self._working_dir / ".venv")
-        cache_base = os.environ.get("UV_CACHE_DIR")
-        if cache_base:
-            cache_dir = Path(cache_base)
-        else:
-            cache_dir = self._working_dir / ".uv-cache"
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        env["UV_CACHE_DIR"] = str(cache_dir.resolve())
         return self._execute(uv_command, self._working_dir, env=env)
 
     def store_file(self, file_path: str | None = None) -> None:

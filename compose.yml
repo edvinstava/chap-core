@@ -52,8 +52,7 @@ services:
       CHAP_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CELERY_BROKER: redis://redis:6379
       RENV_PATHS_ROOT: /data/renv
-      # uv cache on tmpfs: writable for user chap under read_only rootfs (named volume /data/uv is often root:root)
-      UV_CACHE_DIR: /tmp/uv-cache
+      UV_CACHE_DIR: /data/uv
       CHAP_LOGS_DIR: /data/logs
       CHAP_RUNS_DIR: /data/runs
       PYTENSOR_FLAGS: "base_compiledir=/data/pytensor"
@@ -78,6 +77,9 @@ services:
       - type: volume
         source: renv
         target: /data/renv
+      - type: volume
+        source: uv
+        target: /data/uv
       - type: volume
         source: logs
         target: /data/logs
@@ -111,5 +113,6 @@ volumes:
   chap-db: {}
   logs: {}
   renv: {}
+  uv: {}
   pytensor: {}
   runs: {}

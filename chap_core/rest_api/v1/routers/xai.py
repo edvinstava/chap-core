@@ -8,7 +8,7 @@ import logging
 import threading
 from functools import partial
 from types import SimpleNamespace
-from typing import Annotated, Any, Dict, List, Optional
+from typing import Annotated, Any
 
 import numpy as np
 import pandas as pd
@@ -46,7 +46,7 @@ _surrogate_cache_lock = threading.Lock()
 _SURROGATE_CACHE_MAX = 20
 
 
-def _get_cached_surrogate(key: tuple) -> Optional[Any]:
+def _get_cached_surrogate(key: tuple) -> Any | None:
     with _surrogate_cache_lock:
         return _surrogate_cache.get(key)
 
@@ -66,12 +66,12 @@ def _put_cached_surrogate(key: tuple, explainer: Any) -> None:
 
 class GlobalExplanationResponse(DBModel):
     method: str
-    top_features: List[dict]
-    computed_at: Optional[str] = None
+    top_features: list[dict]
+    computed_at: str | None = None
     n_samples: int = 0
-    stability_score: Optional[float] = None
+    stability_score: float | None = None
     available: bool = True
-    surrogate_quality: Optional[Dict[str, Any]] = None
+    surrogate_quality: dict[str, Any] | None = None
 
 
 class LocalExplanationRequest(BaseModel):
@@ -87,20 +87,20 @@ class LocalExplanationRequest(BaseModel):
 
 
 class LocalExplanationResponse(DBModel):
-    id: Optional[int] = None
+    id: int | None = None
     prediction_id: int
     org_unit: str
     period: str
     method: str
-    xai_method_name: Optional[str] = None
+    xai_method_name: str | None = None
     output_statistic: str
-    feature_attributions: List[dict]
+    feature_attributions: list[dict]
     baseline_prediction: float
     actual_prediction: float
-    computed_at: Optional[str] = None
+    computed_at: str | None = None
     status: str = "completed"
-    surrogate_quality: Optional[Dict[str, Any]] = None
-    covariate_provenance: Optional[Dict[str, Any]] = None
+    surrogate_quality: dict[str, Any] | None = None
+    covariate_provenance: dict[str, Any] | None = None
 
 
 class RunExplanationsRequest(DBModel):
@@ -123,9 +123,9 @@ class ShapBeeswarmPoint(DBModel):
 class ShapBeeswarmResponse(DBModel):
     prediction_id: int
     output_statistic: str
-    feature_names: List[str]
-    points: List[ShapBeeswarmPoint]
-    surrogate_quality: Optional[Dict[str, Any]] = None
+    feature_names: list[str]
+    points: list[ShapBeeswarmPoint]
+    surrogate_quality: dict[str, Any] | None = None
 
 
 class HorizonFeatureImportance(DBModel):
@@ -138,9 +138,9 @@ class HorizonStepSummary(DBModel):
     period: str
     target_period: str
     forecast_step: int
-    data_source: Optional[Dict[str, Any]] = None
-    feature_importances: List[HorizonFeatureImportance]
-    actual_prediction: Optional[float] = None
+    data_source: dict[str, Any] | None = None
+    feature_importances: list[HorizonFeatureImportance]
+    actual_prediction: float | None = None
 
 
 class AverageImportance(DBModel):
@@ -155,9 +155,9 @@ class HorizonSummaryResponse(DBModel):
     org_unit: str
     method: str
     output_statistic: str
-    steps: List[HorizonStepSummary]
-    average_importance: List[AverageImportance]
-    surrogate_quality: Optional[Dict[str, Any]] = None
+    steps: list[HorizonStepSummary]
+    average_importance: list[AverageImportance]
+    surrogate_quality: dict[str, Any] | None = None
 
 
 class XaiMethodRead(DBModel):
@@ -166,17 +166,17 @@ class XaiMethodRead(DBModel):
     display_name: str
     description: str
     method_type: str
-    source_url: Optional[str] = None
+    source_url: str | None = None
     author: str
     archived: bool
-    supported_visualizations: List[str]
+    supported_visualizations: list[str]
 
 
 # ---------------------------------------------------------------------------
 # XAI method registry
 # ---------------------------------------------------------------------------
 
-_XAI_METHODS: List[XaiMethodRead] = [
+_XAI_METHODS: list[XaiMethodRead] = [
     XaiMethodRead(
         id=1,
         name="shap_auto",
@@ -330,7 +330,7 @@ _XAI_METHODS: List[XaiMethodRead] = [
 _XAI_METHOD_BY_NAME = {m.name: m for m in _XAI_METHODS}
 
 # Maps xai_method name -> surrogate model_type for SurrogateSHAPExplainer
-_METHOD_TO_MODEL_TYPE: Dict[str, str] = {
+_METHOD_TO_MODEL_TYPE: dict[str, str] = {
     "shap_auto": "auto",
     "shap_xgboost": "xgboost",
     "shap_lightgbm": "lightgbm",
@@ -348,7 +348,7 @@ _METHOD_TO_MODEL_TYPE: Dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 
-def _camel_quality(quality: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _camel_quality(quality: dict[str, Any] | None) -> dict[str, Any] | None:
     """Convert surrogate quality dict keys to camelCase for the frontend."""
     if not quality:
         return None
@@ -459,7 +459,7 @@ def _fit_surrogate(
     feature_names: list[str],
     imputation_rates: dict[str, float],
     xai_method_name: str = "",
-    cache_key: Optional[tuple] = None,
+    cache_key: tuple | None = None,
 ) -> Any:
     """Fit a surrogate explainer with optional Optuna hyperparameter tuning.
 
@@ -573,7 +573,7 @@ def _has_native_shap(prediction: Any) -> bool:
     return bool((prediction.meta_data or {}).get("native_shap"))
 
 
-def _native_shap_global_response(prediction_id: int, prediction: Any, xai_method: str) -> Optional[GlobalExplanationResponse]:
+def _native_shap_global_response(prediction_id: int, prediction: Any, xai_method: str) -> GlobalExplanationResponse | None:
     """Return a GlobalExplanationResponse from stored native SHAP metadata, or None."""
     entry = (prediction.meta_data or {}).get("xai", {}).get("global_by_method", {}).get(xai_method)
     if entry is None:
@@ -596,7 +596,7 @@ def _native_shap_local_response(
     output_statistic: str,
     prediction: Any,
     session: Any,
-) -> Optional["LocalExplanationResponse"]:
+) -> "LocalExplanationResponse | None":
     """Return a LocalExplanationResponse from stored native SHAP data, or None."""
     native_shap = (prediction.meta_data or {}).get("native_shap")
     if not native_shap:
@@ -650,7 +650,7 @@ def _native_shap_beeswarm(
     output_statistic: str,
     prediction: Any,
     dataset: Any,
-) -> Optional[ShapBeeswarmResponse]:
+) -> ShapBeeswarmResponse | None:
     """Build a beeswarm response directly from native SHAP metadata."""
     native_shap = (prediction.meta_data or {}).get("native_shap")
     if not native_shap:
@@ -659,7 +659,7 @@ def _native_shap_beeswarm(
     df = dataset.to_pandas()
     has_location = "location" in df.columns
     period_col = next((c for c in ["time_period", "period", "date"] if c in df.columns), None)
-    points: List[ShapBeeswarmPoint] = []
+    points: list[ShapBeeswarmPoint] = []
     for entry in native_shap.get("values", []):
         shap_vals = entry["shap_values"]
         feature_values = entry.get("feature_values") or {}
@@ -703,10 +703,10 @@ def _native_shap_beeswarm(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/methods", response_model=List[XaiMethodRead], response_model_by_alias=True)
+@router.get("/methods", response_model=list[XaiMethodRead], response_model_by_alias=True)
 async def list_xai_methods(
     include_archived: bool = Query(False, alias="includeArchived"),
-    prediction_id: Optional[int] = Query(None, alias="predictionId"),
+    prediction_id: int | None = Query(None, alias="predictionId"),
     session: Session = Depends(get_session),
 ):
     methods = _XAI_METHODS if include_archived else [m for m in _XAI_METHODS if not m.archived]
@@ -878,7 +878,7 @@ async def run_explanations(
 @router.get("/predictions/{predictionId}/global", response_model=GlobalExplanationResponse)
 async def get_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
-    xai_method: Optional[str] = Query(None, alias="xaiMethod"),
+    xai_method: str | None = Query(None, alias="xaiMethod"),
     session: Session = Depends(get_session),
 ):
     prediction = session.get(Prediction, prediction_id)
@@ -1101,12 +1101,12 @@ async def _compute_global_occlusion(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/predictions/{predictionId}/local", response_model=List[LocalExplanationResponse])
+@router.get("/predictions/{predictionId}/local", response_model=list[LocalExplanationResponse])
 async def list_local_explanations(
     prediction_id: Annotated[int, Path(alias="predictionId")],
-    org_unit: Optional[str] = Query(None, alias="orgUnit"),
-    period: Optional[str] = None,
-    xai_method: Optional[str] = Query(None, alias="xaiMethod"),
+    org_unit: str | None = Query(None, alias="orgUnit"),
+    period: str | None = None,
+    xai_method: str | None = Query(None, alias="xaiMethod"),
     session: Session = Depends(get_session),
 ):
     prediction = session.get(Prediction, prediction_id)
@@ -1146,7 +1146,7 @@ async def list_local_explanations(
         native_shap = (prediction.meta_data or {}).get("native_shap")
         if native_shap:
             feature_names = native_shap.get("feature_names", [])
-            items: List[LocalExplanationResponse] = []
+            items: list[LocalExplanationResponse] = []
             for entry in native_shap.get("values", []):
                 feature_values = entry.get("feature_values") or {}
                 entry_org_unit = str(entry.get("location", ""))
@@ -1421,7 +1421,7 @@ def _beeswarm_from_stored(
     explanations: list,
 ) -> ShapBeeswarmResponse:
     """Build a beeswarm response from stored PredictionExplanation rows."""
-    points: List[ShapBeeswarmPoint] = []
+    points: list[ShapBeeswarmPoint] = []
     feature_names_seen: list[str] = []
     quality = None
 
@@ -1507,7 +1507,7 @@ async def compute_shap_beeswarm(
         )
         explainer = _fit_surrogate(X, y, groups, model_type, feature_names, imputation_rates, xai_method)
 
-        points: List[ShapBeeswarmPoint] = []
+        points: list[ShapBeeswarmPoint] = []
         for i, fc in enumerate(forecasts):
             samples = np.array(fc.values, dtype=float)
             actual = float(np.mean(samples) if output_statistic == "mean" else np.median(samples))
@@ -1564,15 +1564,15 @@ def _horizon_summary_from_stored(
 ) -> HorizonSummaryResponse:
     """Build a HorizonSummaryResponse from stored PredictionExplanation rows."""
     stored_sorted = sorted(stored, key=lambda e: e.period)
-    steps: List[HorizonStepSummary] = []
-    all_importances: Dict[str, List[float]] = {}
+    steps: list[HorizonStepSummary] = []
+    all_importances: dict[str, list[float]] = {}
     quality = None
 
     for step_num, exp in enumerate(stored_sorted, start=1):
         result = exp.result or {}
         if quality is None:
             quality = result.get("surrogate_quality")
-        feat_imps: List[HorizonFeatureImportance] = []
+        feat_imps: list[HorizonFeatureImportance] = []
         for attr in result.get("feature_attributions", []):
             fname = attr.get("feature_name", "")
             if not fname:
@@ -1597,7 +1597,7 @@ def _horizon_summary_from_stored(
             )
         )
 
-    avg_importance: List[AverageImportance] = []
+    avg_importance: list[AverageImportance] = []
     for fname, vals in all_importances.items():
         mean_signed = float(np.mean(vals)) if vals else 0.0
         mean_abs = float(np.mean(np.abs(vals))) if vals else 0.0
@@ -1690,8 +1690,8 @@ async def compute_horizon_summary(
 
         unit_entries.sort(key=lambda x: x[1].period)
 
-        steps: List[HorizonStepSummary] = []
-        all_importances: Dict[str, List[float]] = {f: [] for f in feature_names}
+        steps: list[HorizonStepSummary] = []
+        all_importances: dict[str, list[float]] = {f: [] for f in feature_names}
 
         for step_num, (idx, fc) in enumerate(unit_entries, start=1):
             samples = np.array(fc.values, dtype=float)
@@ -1710,7 +1710,7 @@ async def compute_horizon_summary(
             )
             attr_by_name = {a.feature_name: a.importance for a in local_exp.feature_attributions}
 
-            feat_imps: List[HorizonFeatureImportance] = []
+            feat_imps: list[HorizonFeatureImportance] = []
             for fname in feature_names:
                 val = float(attr_by_name.get(fname, 0.0))
                 all_importances[fname].append(val)
@@ -1733,7 +1733,7 @@ async def compute_horizon_summary(
                 )
             )
 
-        avg_importance: List[AverageImportance] = []
+        avg_importance: list[AverageImportance] = []
         for fname in feature_names:
             vals = all_importances[fname]
             mean_signed = float(np.mean(vals)) if vals else 0.0

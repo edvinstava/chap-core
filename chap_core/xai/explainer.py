@@ -6,7 +6,7 @@ and measuring the impact on forecast outputs.
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
 
 import numpy as np
 
@@ -23,10 +23,10 @@ logger = logging.getLogger(__name__)
 class PerturbationExplainer:
     def __init__(
         self,
-        predict_fn: Callable[[Dict[str, np.ndarray]], np.ndarray],
-        feature_names: List[str],
+        predict_fn: Callable[[dict[str, np.ndarray]], np.ndarray],
+        feature_names: list[str],
         n_repeats: int = 5,
-        random_state: Optional[int] = 42,
+        random_state: int | None = 42,
     ):
         self.predict_fn = predict_fn
         self.feature_names = feature_names
@@ -35,7 +35,7 @@ class PerturbationExplainer:
 
     def explain_global(
         self,
-        X: Dict[str, np.ndarray],
+        X: dict[str, np.ndarray],
         top_k: int = 10,
     ) -> GlobalExplanation:
         baseline_pred = self.predict_fn(X)
@@ -74,7 +74,7 @@ class PerturbationExplainer:
 
     def explain_local(
         self,
-        X: Dict[str, np.ndarray],
+        X: dict[str, np.ndarray],
         prediction_id: int,
         org_unit: str,
         period: str,
@@ -119,7 +119,7 @@ class PerturbationExplainer:
 
     def _permutation_importance(
         self,
-        X: Dict[str, np.ndarray],
+        X: dict[str, np.ndarray],
         feature: str,
         baseline_mean: float,
     ) -> float:
@@ -137,10 +137,10 @@ class PerturbationExplainer:
 
     def _occlude_feature(
         self,
-        X: Dict[str, np.ndarray],
+        X: dict[str, np.ndarray],
         feature: str,
         target_idx: int,
-    ) -> Dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray]:
         X_occluded = {k: v.copy() for k, v in X.items()}
         baseline_value = np.mean(X[feature])
         X_occluded[feature][target_idx] = baseline_value
@@ -148,16 +148,16 @@ class PerturbationExplainer:
 
     def _create_baseline(
         self,
-        X: Dict[str, np.ndarray],
-    ) -> Dict[str, np.ndarray]:
+        X: dict[str, np.ndarray],
+    ) -> dict[str, np.ndarray]:
         return {k: np.full_like(v, np.mean(v)) for k, v in X.items()}
 
 
 def create_predict_fn_from_samples(
     samples: np.ndarray,
     output_statistic: str = "median",
-) -> Callable[[Dict[str, np.ndarray]], np.ndarray]:
-    def predict_fn(X: Dict[str, np.ndarray]) -> np.ndarray:
+) -> Callable[[dict[str, np.ndarray]], np.ndarray]:
+    def predict_fn(X: dict[str, np.ndarray]) -> np.ndarray:
         if output_statistic == "median":
             return np.median(samples, axis=-1)
         elif output_statistic == "mean":

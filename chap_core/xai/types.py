@@ -2,14 +2,14 @@
 Data types for XAI explanations.
 """
 
-from datetime import datetime
-from enum import Enum
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class ExplanationMethod(str, Enum):
+class ExplanationMethod(StrEnum):
     PERMUTATION_IMPORTANCE = "permutation_importance"
     CORRELATION = "correlation"
     OCCLUSION = "occlusion"
@@ -20,9 +20,9 @@ class ExplanationMethod(str, Enum):
 class FeatureAttribution(BaseModel):
     feature_name: str
     importance: float
-    direction: Optional[str] = None
-    baseline_value: Optional[float] = None
-    actual_value: Optional[float] = None
+    direction: str | None = None
+    baseline_value: float | None = None
+    actual_value: float | None = None
 
     class Config:
         populate_by_name = True
@@ -30,12 +30,12 @@ class FeatureAttribution(BaseModel):
 
 class GlobalExplanation(BaseModel):
     method: ExplanationMethod
-    top_features: List[FeatureAttribution]
-    computed_at: datetime = Field(default_factory=datetime.utcnow)
+    top_features: list[FeatureAttribution]
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     n_samples: int = 0
-    stability_score: Optional[float] = None
+    stability_score: float | None = None
 
-    def to_meta_dict(self) -> Dict[str, Any]:
+    def to_meta_dict(self) -> dict[str, Any]:
         return {
             "xai": {
                 "global": {
@@ -49,7 +49,7 @@ class GlobalExplanation(BaseModel):
         }
 
     @classmethod
-    def from_meta_dict(cls, meta: Dict[str, Any]) -> Optional["GlobalExplanation"]:
+    def from_meta_dict(cls, meta: dict[str, Any]) -> "GlobalExplanation | None":
         if not meta or "xai" not in meta or "global" not in meta.get("xai", {}):
             return None
         g = meta["xai"]["global"]
@@ -68,7 +68,7 @@ class LocalExplanation(BaseModel):
     period: str
     method: ExplanationMethod
     output_statistic: str = "median"
-    feature_attributions: List[FeatureAttribution]
+    feature_attributions: list[FeatureAttribution]
     baseline_prediction: float
     actual_prediction: float
-    computed_at: datetime = Field(default_factory=datetime.utcnow)
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

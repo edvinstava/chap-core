@@ -43,11 +43,11 @@ def test_run_command():
     assert "test2" in output, "Output from command not as expected, output is: " + output
 
 
-def test_uv_runner_prepends_uv_run(tmp_path):
+def test_uv_runner_prepends_uv_run():
     """Test that UvRunner correctly prepends 'uv run' to commands"""
     with patch.object(UvRunner, "_execute") as mock_execute:
         mock_execute.return_value = "test output"
-        runner = UvRunner(tmp_path)
+        runner = UvRunner(Path("."))
         runner.run_command("python main.py train data.csv model.pkl")
         mock_execute.assert_called_once_with("uv run python main.py train data.csv model.pkl", Path("."), env=ANY)
 

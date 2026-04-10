@@ -72,28 +72,16 @@ class TrackedTask(Task):
         # Extract the current task id
         task_id = self.request.id
 
-        debug_file_handler: logging.Handler | None = None
-        status_file_handler: logging.Handler | None = None
-        try:
-            CHAP_LOGS_DIR.mkdir(parents=True, exist_ok=True)
-            debug_file_handler = logging.FileHandler(CHAP_LOGS_DIR / f"task_{task_id}.debug.txt")
-            status_file_handler = logging.FileHandler(CHAP_LOGS_DIR / f"task_{task_id}.status.txt")
-        except OSError as exc:
-            logger.warning(
-                "Cannot write task logs under %s (%s); using console only",
-                CHAP_LOGS_DIR,
-                exc,
-            )
-            if debug_file_handler is not None:
-                debug_file_handler.close()
-            if status_file_handler is not None:
-                status_file_handler.close()
-            debug_file_handler = logging.NullHandler()
-            status_file_handler = logging.NullHandler()
+        # Ensure logs directory exists
+        CHAP_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
+        # Create debug log file handler (full debug logs, server access only)
+        debug_file_handler = logging.FileHandler(CHAP_LOGS_DIR / f"task_{task_id}.debug.txt")
         debug_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
         debug_file_handler.setFormatter(debug_formatter)
 
+        # Create status log file handler (user-facing progress, exposed via API)
+        status_file_handler = logging.FileHandler(CHAP_LOGS_DIR / f"task_{task_id}.status.txt")
         status_formatter = logging.Formatter("%(asctime)s: %(message)s")
         status_file_handler.setFormatter(status_formatter)
 
@@ -304,17 +292,9 @@ class CeleryJob[ReturnType]:
             if job_meta and job_meta.get("status") == "FAILURE":
                 logs += "\n" + job_meta.get("traceback", "")
             return logs
-
-        job_meta = get_job_meta(self.id)
-        fallback = self.exception_info or ""
-        if fallback.strip():
-            return fallback
-        if job_meta and job_meta.get("status") == "SUCCESS":
-            return (
-                "Job completed successfully. No status log file was available "
-                "(ensure the worker can write to CHAP_LOGS_DIR)."
-            )
-        return fallback
+        else:
+            # Fallback to traceback if log file not found
+            return self.exception_info
 
 
 class CeleryPool[ReturnType]:
