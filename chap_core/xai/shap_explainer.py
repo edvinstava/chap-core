@@ -18,7 +18,7 @@ Supported model types and their tunable parameters are defined in surrogate_mode
 import io
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -53,28 +53,28 @@ MIN_SAMPLES_FOR_TARGET_TRANSFORM = 30
 
 @dataclass
 class SurrogateQuality:
-    r_squared: Optional[float] = None
+    r_squared: float | None = None
     mae: float = 0.0
-    mape: Optional[float] = None
+    mape: float | None = None
     n_samples: int = 0
     n_unique_rows: int = 0
     constant_features: list[str] = field(default_factory=list)
     imputation_rates: dict[str, float] = field(default_factory=dict)
     removed_features: list[str] = field(default_factory=list)
-    selected_model_type: Optional[str] = None
-    selected_model_display_name: Optional[str] = None
-    n_groups: Optional[int] = None
+    selected_model_type: str | None = None
+    selected_model_display_name: str | None = None
+    n_groups: int | None = None
     fidelity_tier: str = "good"
-    fidelity_warning: Optional[str] = None
-    residual_mean: Optional[float] = None
-    residual_std: Optional[float] = None
+    fidelity_warning: str | None = None
+    residual_mean: float | None = None
+    residual_std: float | None = None
     target_transformed: bool = False
-    target_transform_method: Optional[str] = None
+    target_transform_method: str | None = None
     permutation_removed_features: list[str] = field(default_factory=list)
-    r_squared_train: Optional[float] = None
+    r_squared_train: float | None = None
 
 
-def _compute_fidelity_tier(r2: Optional[float]) -> tuple[str, Optional[str]]:
+def _compute_fidelity_tier(r2: float | None) -> tuple[str, str | None]:
     """Return (fidelity_tier, fidelity_warning) based on LOO-R².
 
     Thresholds follow XAI best practice for surrogate fidelity:
@@ -102,14 +102,13 @@ def tune_hyperparameters(
     y: np.ndarray,
     model_type: str = DEFAULT_MODEL_TYPE,
     n_trials: int = DEFAULT_TUNING_TRIALS,
-    groups: Optional[np.ndarray] = None,
+    groups: np.ndarray | None = None,
     random_state: int = 42,
 ) -> dict:
     """Use Optuna to find optimal hyperparameters for the given surrogate model type."""
     return tune_surrogate_hyperparameters(
         X, y, model_type=model_type, n_trials=n_trials, groups=groups, random_state=random_state
     )
-
 
 
 def _compute_target(
@@ -194,17 +193,12 @@ def filter_features(
     # Permutation-based feature selection: only for large datasets with many features
     perm_removed_feats: list[str] = []
     n_features_filtered = X_filtered.shape[1]
-    if (
-        n_features_filtered > MIN_FEATURES_FOR_PERMUTATION
-        and len(X_filtered) >= MIN_SAMPLES_FOR_PERMUTATION
-    ):
+    if n_features_filtered > MIN_FEATURES_FOR_PERMUTATION and len(X_filtered) >= MIN_SAMPLES_FOR_PERMUTATION:
         try:
             from sklearn.inspection import permutation_importance
             from sklearn.model_selection import train_test_split
 
-            X_tr, X_val, y_tr, y_val = train_test_split(
-                X_filtered, y, test_size=0.25, random_state=random_state
-            )
+            X_tr, X_val, y_tr, y_val = train_test_split(X_filtered, y, test_size=0.25, random_state=random_state)
             quick_model = make_loo_model_factory(model_type, random_state=random_state, n_samples=len(X_tr))()
             quick_model.fit(X_tr, y_tr)
             perm_result = permutation_importance(
@@ -268,10 +262,10 @@ class SurrogateSHAPExplainer:
     def __init__(
         self,
         feature_names: list[str],
-        model_config: Optional[dict] = None,
+        model_config: dict | None = None,
         random_state: int = 42,
-        hyperparams: Optional[dict] = None,
-        imputation_rates: Optional[dict[str, float]] = None,
+        hyperparams: dict | None = None,
+        imputation_rates: dict[str, float] | None = None,
     ):
         self.feature_names = list(feature_names)
         self.model_config = model_config or {}
@@ -287,19 +281,19 @@ class SurrogateSHAPExplainer:
         self._model = build_surrogate_model(model_type, params, random_state=random_state)
         self._shap_explainer = None
         self._is_fitted = False
-        self.quality: Optional[SurrogateQuality] = None
-        self._shap_batch_cache: Optional[np.ndarray] = None
-        self._shap_batch_cached_X: Optional[np.ndarray] = None
-        self._lime_explainer_cache: Optional[Any] = None
-        self._lime_cached_X: Optional[np.ndarray] = None
+        self.quality: SurrogateQuality | None = None
+        self._shap_batch_cache: np.ndarray | None = None
+        self._shap_batch_cached_X: np.ndarray | None = None
+        self._lime_explainer_cache: Any | None = None
+        self._lime_cached_X: np.ndarray | None = None
 
     def fit(
         self,
         X: np.ndarray,
         y: np.ndarray,
         min_samples: int = MIN_SAMPLES_GLOBAL,
-        groups: Optional[np.ndarray] = None,
-        filter_result: Optional[FilterResult] = None,
+        groups: np.ndarray | None = None,
+        filter_result: FilterResult | None = None,
     ) -> None:
         """Fit the surrogate model on (X, y).
 
@@ -340,7 +334,7 @@ class SurrogateSHAPExplainer:
         n_fit = len(X_filtered)
 
         # Target transform: only for datasets large enough to estimate reliably
-        target_transform_method: Optional[str] = None
+        target_transform_method: str | None = None
         if n_fit >= MIN_SAMPLES_FOR_TARGET_TRANSFORM:
             try:
                 from sklearn.compose import TransformedTargetRegressor
@@ -350,9 +344,7 @@ class SurrogateSHAPExplainer:
                 cv_folds = min(n_fit, 5) if n_fit >= 10 else max(2, n_fit)
 
                 def _make_model():
-                    return build_surrogate_model(
-                        model_type, params, random_state=self._random_state, n_samples=n_fit
-                    )
+                    return build_surrogate_model(model_type, params, random_state=self._random_state, n_samples=n_fit)
 
                 r2_raw = float(np.mean(_cvs(_make_model(), X_filtered, y, cv=cv_folds, scoring="r2")))
                 best_r2, best_method = r2_raw, None
@@ -407,9 +399,7 @@ class SurrogateSHAPExplainer:
             )
             final_model.fit(X_filtered, y)
             self._model = final_model
-            self._shap_explainer = self._try_build_shap_explainer(
-                final_model.regressor_, model_type, X_filtered
-            )
+            self._shap_explainer = self._try_build_shap_explainer(final_model.regressor_, model_type, X_filtered)
         elif target_transform_method == "yeo_johnson":
             from sklearn.compose import TransformedTargetRegressor
             from sklearn.preprocessing import PowerTransformer
@@ -420,9 +410,7 @@ class SurrogateSHAPExplainer:
             )
             final_model.fit(X_filtered, y)
             self._model = final_model
-            self._shap_explainer = self._try_build_shap_explainer(
-                final_model.regressor_, model_type, X_filtered
-            )
+            self._shap_explainer = self._try_build_shap_explainer(final_model.regressor_, model_type, X_filtered)
         else:
             final_model = build_surrogate_model(model_type, params, random_state=self._random_state, n_samples=n_fit)
             final_model.fit(X_filtered, y)
@@ -465,7 +453,7 @@ class SurrogateSHAPExplainer:
             errors = np.abs(y - loo_preds)
             mae = float(np.mean(errors))
             nonzero = np.abs(y) > 1e-8
-            mape: Optional[float] = float(np.mean(errors[nonzero] / np.abs(y[nonzero]))) if nonzero.any() else None
+            mape: float | None = float(np.mean(errors[nonzero] / np.abs(y[nonzero]))) if nonzero.any() else None
         else:
             preds = self._model.predict(X_filtered)
             errors = np.abs(y - preds)
@@ -473,22 +461,22 @@ class SurrogateSHAPExplainer:
             nonzero = np.abs(y) > 1e-8
             mape = float(np.mean(errors[nonzero] / np.abs(y[nonzero]))) if nonzero.any() else None
 
-        residual_mean: Optional[float] = None
-        residual_std: Optional[float] = None
+        residual_mean: float | None = None
+        residual_std: float | None = None
         if r2_cv is not None:
             residuals = y - loo_preds
             residual_mean = float(np.mean(residuals))
             residual_std = float(np.std(residuals))
 
-        n_groups: Optional[int] = None
+        n_groups: int | None = None
         if groups is not None:
-            n_groups = int(len(np.unique(groups)))
+            n_groups = len(np.unique(groups))
 
         from sklearn.metrics import r2_score as _r2_score
 
         train_preds = self._model.predict(X_filtered)
         ss_tot_train = float(np.sum((y - np.mean(y)) ** 2))
-        r2_train: Optional[float] = float(_r2_score(y, train_preds)) if ss_tot_train > 0 else None
+        r2_train: float | None = float(_r2_score(y, train_preds)) if ss_tot_train > 0 else None
 
         fidelity_tier, fidelity_warning = _compute_fidelity_tier(r2_cv)
 
@@ -515,9 +503,7 @@ class SurrogateSHAPExplainer:
         )
 
     @staticmethod
-    def _try_build_shap_explainer(
-        model: Any, model_type: str, X_train: Optional[np.ndarray] = None
-    ) -> Any:
+    def _try_build_shap_explainer(model: Any, model_type: str, X_train: np.ndarray | None = None) -> Any:
         """Build a SHAP explainer, returning None if the shap package is not installed."""
         try:
             return build_shap_explainer(model, model_type, X_train=X_train)
@@ -605,7 +591,7 @@ class SurrogateSHAPExplainer:
 
     def to_bytes(self) -> bytes:
         """Serialize the fitted surrogate model to bytes."""
-        import joblib
+        import joblib  # type: ignore[import-untyped]
 
         if not self._is_fitted:
             raise RuntimeError("Call fit() before to_bytes().")
@@ -662,9 +648,7 @@ class SurrogateSHAPExplainer:
             model_type = quality.selected_model_type if quality and quality.selected_model_type else DEFAULT_MODEL_TYPE
         is_transformed = target_transform_method is not None
         shap_model = model.regressor_ if is_transformed and hasattr(model, "regressor_") else model
-        instance._shap_explainer = cls._try_build_shap_explainer(
-            shap_model, model_type, instance._X_train
-        )
+        instance._shap_explainer = cls._try_build_shap_explainer(shap_model, model_type, instance._X_train)
         instance._is_fitted = True
         instance.quality = quality
         return instance
@@ -672,7 +656,7 @@ class SurrogateSHAPExplainer:
     def predict(self, X: np.ndarray) -> np.ndarray:
         if not self._is_fitted:
             raise RuntimeError("Call fit() before predict().")
-        return self._model.predict(self._filter_X(X))
+        return np.asarray(self._model.predict(self._filter_X(X)), dtype=float)
 
     def quality_dict(self) -> dict:
         if self.quality is None:
@@ -695,7 +679,9 @@ class SurrogateSHAPExplainer:
             "target_transformed": self.quality.target_transformed,
             "target_transform_method": self.quality.target_transform_method,
             "permutation_removed_features": self.quality.permutation_removed_features,
-            "r_squared_train": round(self.quality.r_squared_train, 6) if self.quality.r_squared_train is not None else None,
+            "r_squared_train": round(self.quality.r_squared_train, 6)
+            if self.quality.r_squared_train is not None
+            else None,
         }
 
     def explain_global(
@@ -751,7 +737,7 @@ class SurrogateSHAPExplainer:
         feature_actual_values: dict[str, float],
         top_k: int = 10,
         output_statistic: str = "median",
-        actual_forecast_value: Optional[float] = None,
+        actual_forecast_value: float | None = None,
     ) -> LocalExplanation:
         if not self._is_fitted:
             raise RuntimeError("Call fit() before explain_local().")
@@ -810,7 +796,7 @@ class SurrogateSHAPExplainer:
         feature_actual_values: dict[str, float],
         top_k: int = 10,
         output_statistic: str = "median",
-        actual_forecast_value: Optional[float] = None,
+        actual_forecast_value: float | None = None,
         interaction_top_k: int = 3,
     ) -> tuple[LocalExplanation, list[dict]]:
         """Like explain_local but also returns SHAP interaction values for top features."""
@@ -836,6 +822,8 @@ class SurrogateSHAPExplainer:
         top_k: int = 3,
     ) -> list[dict]:
         """Compute SHAP interaction values for a single instance."""
+        if self._shap_explainer is None:
+            return []
         try:
             X_f = self._filter_X(X)
             iv_filtered = self._shap_explainer.shap_interaction_values(X_f[instance_idx : instance_idx + 1])[0]
@@ -846,19 +834,22 @@ class SurrogateSHAPExplainer:
         # Expand filtered (n_kept, n_kept) interaction matrix back to full feature space.
         n_feats = len(self.feature_names)
         interaction_values = np.zeros((n_feats, n_feats))
-        keep = self._keep_indices if hasattr(self, "_keep_indices") and self._keep_indices is not None else list(range(n_feats))
+        keep = (
+            self._keep_indices
+            if hasattr(self, "_keep_indices") and self._keep_indices is not None
+            else list(range(n_feats))
+        )
         for out_i, orig_i in enumerate(keep):
             for out_j, orig_j in enumerate(keep):
                 interaction_values[orig_i, orig_j] = iv_filtered[out_i, out_j]
 
         pairs: list[tuple[float, int, int]] = []
         for i in range(n_feats):
-            for j in range(i + 1, n_feats):
-                pairs.append((abs(float(interaction_values[i, j])), i, j))
+            pairs.extend((abs(float(interaction_values[i, j])), i, j) for j in range(i + 1, n_feats))
         pairs.sort(reverse=True)
 
         result = []
-        for abs_val, i, j in pairs[:top_k]:
+        for _abs_val, i, j in pairs[:top_k]:
             val = float(interaction_values[i, j])
             result.append(
                 {
@@ -880,8 +871,8 @@ class SurrogateSHAPExplainer:
         feature_actual_values: dict[str, float],
         top_k: int = 10,
         output_statistic: str = "median",
-        n_samples: Optional[int] = None,
-        actual_forecast_value: Optional[float] = None,
+        n_samples: int | None = None,
+        actual_forecast_value: float | None = None,
     ) -> LocalExplanation:
         if not self._is_fitted:
             raise RuntimeError("Call fit() before explain_local_lime().")
@@ -894,7 +885,7 @@ class SurrogateSHAPExplainer:
         )
 
         try:
-            from lime.lime_tabular import LimeTabularExplainer
+            from lime.lime_tabular import LimeTabularExplainer  # type: ignore[import-untyped]
 
             X_f = self._filter_X(X)
             kept_names = (
@@ -917,6 +908,8 @@ class SurrogateSHAPExplainer:
                     mode="regression",
                     discretize_continuous=False,
                 )
+            if self._lime_explainer_cache is None:
+                raise RuntimeError("LIME explainer cache is not initialized")
             exp = self._lime_explainer_cache.explain_instance(
                 X_f[instance_idx],
                 self._model.predict,
@@ -978,9 +971,7 @@ class SurrogateSHAPExplainer:
 
         X_f = self._filter_X(X)
         y_surrogate = self._model.predict(X_f)
-        result = permutation_importance(
-            self._model, X_f, y_surrogate, n_repeats=10, random_state=self._random_state
-        )
+        result = permutation_importance(self._model, X_f, y_surrogate, n_repeats=10, random_state=self._random_state)
         # Expand filtered importances back to full feature space
         mean_abs_filtered = np.maximum(result.importances_mean, 0.0)
         mean_abs_full = np.zeros(len(self.feature_names))
@@ -1045,7 +1036,7 @@ class SurrogateSHAPExplainer:
                 ranks = np.empty_like(order)
                 ranks[order] = np.arange(n_feats)
                 rank_matrix[b] = ranks / max(n_feats - 1, 1)
-        return np.std(rank_matrix, axis=0)
+        return np.asarray(np.std(rank_matrix, axis=0), dtype=float)
 
 
 class SurrogateLIMEExplainer(SurrogateSHAPExplainer):
@@ -1067,7 +1058,7 @@ class SurrogateLIMEExplainer(SurrogateSHAPExplainer):
         feature_actual_values: dict[str, float],
         top_k: int = 10,
         output_statistic: str = "median",
-        actual_forecast_value: Optional[float] = None,
+        actual_forecast_value: float | None = None,
     ) -> LocalExplanation:
         return self.explain_local_lime(
             X=X,

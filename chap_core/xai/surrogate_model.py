@@ -15,7 +15,8 @@ To add a new model type:
   2. Optionally register a matching XaiMethod in xai_method_seed.py.
 """
 
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 
@@ -260,7 +261,8 @@ def get_display_name(model_type: str) -> str:
     info = SUPPORTED_MODELS.get(model_type)
     if info is None:
         return model_type
-    return info.get("display_name", model_type)
+    value = info.get("display_name", model_type)
+    return str(value)
 
 
 def _is_model_available(model_type: str) -> bool:
@@ -271,6 +273,7 @@ def _is_model_available(model_type: str) -> bool:
     module_path = info["class_dotted"].rsplit(".", 1)[0]
     try:
         import importlib
+
         importlib.import_module(module_path)
         return True
     except (ImportError, OSError):
@@ -278,7 +281,7 @@ def _is_model_available(model_type: str) -> bool:
 
 
 def build_surrogate_model(
-    model_type: str, params: dict[str, Any], random_state: int = 42, n_samples: Optional[int] = None
+    model_type: str, params: dict[str, Any], random_state: int = 42, n_samples: int | None = None
 ):
     """Instantiate an unfitted sklearn-compatible surrogate model.
 
@@ -327,7 +330,7 @@ def build_surrogate_model(
 def resolve_model_params(
     model_type: str,
     model_config: dict[str, Any],
-    hyperparams: Optional[dict[str, Any]] = None,
+    hyperparams: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Merge default, config-level, and tuned params into a final params dict.
@@ -337,23 +340,17 @@ def resolve_model_params(
     """
     info = get_model_info(model_type)
     params: dict[str, Any] = {**info["default_params"]}
-    for k, v in model_config.items():
-        if k != "model_type":
-            params[k] = v
+    params.update({k: v for k, v in model_config.items() if k != "model_type"})
     if hyperparams:
         params.update(hyperparams)
     return params
 
 
-def make_loo_model_factory(
-    model_type: str, random_state: int = 42, n_samples: Optional[int] = None
-) -> Callable:
+def make_loo_model_factory(model_type: str, random_state: int = 42, n_samples: int | None = None) -> Callable:
     """Return a zero-argument callable that produces a cheap LOO model instance."""
     info = get_model_info(model_type)
     loo_params = info["loo_params"]
-    return lambda: build_surrogate_model(
-        model_type, loo_params, random_state=random_state, n_samples=n_samples
-    )
+    return lambda: build_surrogate_model(model_type, loo_params, random_state=random_state, n_samples=n_samples)
 
 
 def make_model_factory(
@@ -361,7 +358,7 @@ def make_model_factory(
     params: dict[str, Any],
     random_state: int = 42,
     max_estimators: int = 400,
-    n_samples: Optional[int] = None,
+    n_samples: int | None = None,
 ) -> Callable:
     """Return a zero-argument callable that produces a model with *params*.
 
@@ -376,7 +373,7 @@ def make_model_factory(
     return lambda: build_surrogate_model(model_type, capped, random_state=random_state, n_samples=n_samples)
 
 
-def build_shap_explainer(model, model_type: str, X_train: Optional[np.ndarray] = None):
+def build_shap_explainer(model, model_type: str, X_train: np.ndarray | None = None):
     """Create a SHAP explainer appropriate for the given surrogate model type.
 
     For linear models, *X_train* is required as background data.
@@ -404,8 +401,8 @@ def _loo_r2(
     X: np.ndarray,
     y: np.ndarray,
     model_factory: Callable,
-    groups: Optional[np.ndarray] = None,
-) -> tuple[Optional[float], np.ndarray]:
+    groups: np.ndarray | None = None,
+) -> tuple[float | None, np.ndarray]:
     """
     Leave-one-out (or leave-one-group-out) R² for a model factory.
 
@@ -459,7 +456,7 @@ def _loo_r2(
 def auto_select_best_model_type(
     X: np.ndarray,
     y: np.ndarray,
-    groups: Optional[np.ndarray] = None,
+    groups: np.ndarray | None = None,
     random_state: int = 42,
 ) -> list[str]:
     """
@@ -528,7 +525,7 @@ def _run_tuning_study(
     y: np.ndarray,
     model_type: str,
     n_trials: int,
-    groups: Optional[np.ndarray],
+    groups: np.ndarray | None,
     random_state: int,
 ) -> tuple[dict[str, Any], float]:
     """Run an Optuna study for *model_type* and return ``(best_params, best_cv_score)``.
@@ -546,10 +543,10 @@ def _run_tuning_study(
     tunable = info["tunable_params"]
     n_samples = len(X)
 
-    # Normalisation constant so the objective is scale-invariant (≈ –(1–R²)).
+    # Normalisation constant so the objective is scale-invariant (approximately -(1-R^2)).
     y_var = float(np.var(y)) + 1e-8
 
-    effective_groups: Optional[np.ndarray] = None
+    effective_groups: np.ndarray | None = None
     if groups is not None and len(np.unique(groups)) >= 2:
         effective_groups = groups
         n_unique = len(np.unique(groups))
@@ -566,7 +563,7 @@ def _run_tuning_study(
         # XGBoost early stopping requires eval_set in fit(); omit it during tuning
         if model_type == "xgboost":
             params.pop("early_stopping_rounds", None)
-        model_template = lambda: build_surrogate_model(  # noqa: E731
+        model_template = lambda: build_surrogate_model(
             model_type, params, random_state=random_state, n_samples=n_samples
         )
         split_kwargs = {"groups": effective_groups} if effective_groups is not None else {}
@@ -583,7 +580,7 @@ def _run_tuning_study(
             scores.append(fold_score)
             trial.report(float(np.mean(scores)), fold_idx)
             if trial.should_prune():
-                raise optuna.TrialPruned()
+                raise optuna.TrialPruned
         return float(np.mean(scores))
 
     # Use enough random startup trials so TPE has a good initial landscape estimate.
@@ -602,7 +599,7 @@ def tune_surrogate_hyperparameters(
     y: np.ndarray,
     model_type: str = DEFAULT_MODEL_TYPE,
     n_trials: int = 30,
-    groups: Optional[np.ndarray] = None,
+    groups: np.ndarray | None = None,
     random_state: int = 42,
 ) -> dict[str, Any]:
     """
@@ -622,7 +619,7 @@ def tune_surrogate_hyperparameters(
 def select_and_tune_best_model_type(
     X: np.ndarray,
     y: np.ndarray,
-    groups: Optional[np.ndarray] = None,
+    groups: np.ndarray | None = None,
     n_trials: int = 80,
     random_state: int = 42,
 ) -> tuple[str, dict[str, Any]]:

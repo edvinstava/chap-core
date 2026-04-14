@@ -22,7 +22,7 @@ class PredictionExplanationBase(DBModel):
     result: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     status: str = "completed"
     error: str | None = None
-    created: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(datetime.UTC))
 
 
 class PredictionExplanation(PredictionExplanationBase, table=True):

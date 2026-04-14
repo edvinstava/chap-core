@@ -2,7 +2,9 @@ import json
 import logging
 import os
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional, List
 from unittest.mock import patch
 
@@ -292,3 +294,42 @@ def clean_engine(database_url):
 @pytest.fixture
 def test_config():
     return WorkerConfig(is_test=True)
+
+
+@pytest.fixture
+def make_covariate_df():
+    def _make(
+        periods: list[str], rainfall: list[float], location: str = "A", as_datetime: bool = False
+    ) -> pd.DataFrame:
+        time_period = pd.to_datetime(periods) if as_datetime else periods
+        return pd.DataFrame(
+            {
+                "location": [location] * len(periods),
+                "time_period": time_period,
+                "rainfall": rainfall,
+            }
+        )
+
+    return _make
+
+
+@pytest.fixture
+def make_simple_forecasts():
+    def _make(rows: list[tuple[str, str]]) -> list[SimpleNamespace]:
+        return [SimpleNamespace(org_unit=org_unit, period=period) for org_unit, period in rows]
+
+    return _make
+
+
+@dataclass
+class FakeForecast:
+    org_unit: str
+    period: str
+
+
+@pytest.fixture
+def make_fake_forecasts():
+    def _make(rows: list[tuple[str, str]]) -> list[FakeForecast]:
+        return [FakeForecast(org_unit=org_unit, period=period) for org_unit, period in rows]
+
+    return _make

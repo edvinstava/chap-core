@@ -137,11 +137,16 @@ def _build_native_shap_metadata(native_shap: dict) -> dict:
     n_samples = len(values)
 
     # Mean absolute SHAP per feature
-    shap_matrix = np.array([v["shap_values"] for v in values], dtype=float) if values else np.zeros((0, len(feature_names)))
+    shap_matrix = (
+        np.array([v["shap_values"] for v in values], dtype=float) if values else np.zeros((0, len(feature_names)))
+    )
     mean_abs = np.mean(np.abs(shap_matrix), axis=0) if n_samples > 0 else np.zeros(len(feature_names))
 
     top_features = sorted(
-        [{"feature_name": fn, "importance": float(mean_abs[i]), "direction": None} for i, fn in enumerate(feature_names)],
+        [
+            {"feature_name": fn, "importance": float(mean_abs[i]), "direction": None}
+            for i, fn in enumerate(feature_names)
+        ],
         key=lambda x: x["importance"],
         reverse=True,
     )
@@ -152,7 +157,7 @@ def _build_native_shap_metadata(native_shap: dict) -> dict:
             "global_by_method": {
                 "native_shap": {
                     "topFeatures": top_features,
-                    "computedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "computedAt": datetime.datetime.now(datetime.UTC).isoformat(),
                     "nSamples": n_samples,
                     "stabilityScore": None,
                     "surrogateQuality": None,
@@ -177,7 +182,7 @@ def _store_native_shap_explanations(native_shap: dict, prediction_id: int, sessi
                 "direction": "positive" if shap_vals[i] >= 0 else "negative",
                 "baseline_value": None,
                 "actual_value": (
-                    float(feature_values.get(fn)) if feature_values.get(fn) is not None else None
+                    float(raw_feature_value) if (raw_feature_value := feature_values.get(fn)) is not None else None
                 ),
             }
             for i, fn in enumerate(feature_names)

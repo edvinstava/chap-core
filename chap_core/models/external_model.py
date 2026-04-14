@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 
@@ -389,7 +390,8 @@ class ExternalModel(ExternalModelBase):
             shap_file = Path(self._working_dir) / "shap_values.csv"
             if shap_file.exists():
                 try:
-                    d.native_shap = _parse_shap_csv(shap_file)
+                    native_shap = _parse_shap_csv(shap_file)
+                    cast("Any", d).native_shap = native_shap
                     logger.info("Loaded native SHAP values from shap_values.csv")
                 except Exception as exc:
                     logger.warning("Failed to parse shap_values.csv: %s", exc)

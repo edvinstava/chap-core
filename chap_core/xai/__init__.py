@@ -13,9 +13,9 @@ from .types import (
 )
 
 __all__ = [
+    "ExplanationMethod",
     "FeatureAttribution",
     "GlobalExplanation",
     "LocalExplanation",
-    "ExplanationMethod",
     "PerturbationExplainer",
 ]

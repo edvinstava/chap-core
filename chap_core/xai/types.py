@@ -2,11 +2,11 @@
 Data types for XAI explanations.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ExplanationMethod(StrEnum):
@@ -24,14 +24,13 @@ class FeatureAttribution(BaseModel):
     baseline_value: float | None = None
     actual_value: float | None = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class GlobalExplanation(BaseModel):
     method: ExplanationMethod
     top_features: list[FeatureAttribution]
-    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     n_samples: int = 0
     stability_score: float | None = None
 
@@ -71,4 +70,4 @@ class LocalExplanation(BaseModel):
     feature_attributions: list[FeatureAttribution]
     baseline_prediction: float
     actual_prediction: float
-    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

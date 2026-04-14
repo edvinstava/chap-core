@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from chap_core.xai.covariate_fallback import _target_signature, _year_month_from_any
 
@@ -10,7 +10,7 @@ def norm_period_id(p: str) -> str:
     return str(p).strip().replace("-", "_")
 
 
-def find_forecast_row_index(forecasts: list[Any], org_unit: str, period: str) -> Optional[int]:
+def find_forecast_row_index(forecasts: list[Any], org_unit: str, period: str) -> int | None:
     """Index in ``forecasts`` for (org_unit, period).
 
     Normalizes ``-`` vs ``_``. Avoids matching ``startswith(calendar_month)``, which
@@ -58,9 +58,7 @@ def find_forecast_row_index(forecasts: list[Any], org_unit: str, period: str) ->
             if sig is not None and sig[0] == "month":
                 _, target_year, target_month = sig
                 cal_matches = [
-                    i
-                    for i in unit_indices
-                    if _year_month_from_any(forecasts[i].period) == (target_year, target_month)
+                    i for i in unit_indices if _year_month_from_any(forecasts[i].period) == (target_year, target_month)
                 ]
                 if len(cal_matches) == 1:
                     return cal_matches[0]

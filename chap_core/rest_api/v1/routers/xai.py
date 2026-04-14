@@ -6,31 +6,29 @@ Provides endpoints for retrieving and computing explanations for predictions.
 
 import logging
 import threading
-from functools import partial
-from types import SimpleNamespace
+from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Annotated, Any
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import Session, select
 
 from chap_core.database.base_tables import DBModel
 from chap_core.database.database import SessionWrapper
 from chap_core.database.tables import Prediction
-from chap_core.database.xai_tables import PredictionExplanation, PredictionExplanationRead
+from chap_core.database.xai_tables import PredictionExplanation
 from chap_core.log_config import get_status_logger
 from chap_core.rest_api.celery_tasks import JOB_NAME_KW, JOB_TYPE_KW, CeleryPool
 from chap_core.rest_api.data_models import JobResponse
 from chap_core.xai.covariate_fallback import resolve_covariate_row
-from chap_core.xai.forecast_matching import find_forecast_row_index as _find_instance_idx
+from chap_core.xai.forecast_matching import find_forecast_row_index
+from chap_core.xai.method_registry import XAI_METHODS as XAI_METHOD_DEFINITIONS
 from chap_core.xai.types import (
-    ExplanationMethod,
-    FeatureAttribution,
     GlobalExplanation,
-    LocalExplanation,
 )
 
 from .dependencies import get_database_url, get_session
@@ -38,8 +36,7 @@ from .dependencies import get_database_url, get_session
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/xai", tags=["xai"])
-router_get = partial(router.get, response_model_by_alias=True)
-worker: CeleryPool = CeleryPool()
+worker: CeleryPool[Any] = CeleryPool()
 
 _surrogate_cache: dict[tuple, Any] = {}
 _surrogate_cache_lock = threading.Lock()
@@ -82,8 +79,7 @@ class LocalExplanationRequest(BaseModel):
     top_k: int = Field(10, alias="topK")
     force: bool = False
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class LocalExplanationResponse(DBModel):
@@ -103,13 +99,12 @@ class LocalExplanationResponse(DBModel):
     covariate_provenance: dict[str, Any] | None = None
 
 
-class RunExplanationsRequest(DBModel):
+class RunExplanationsRequest(BaseModel):
     xai_method_name: str = Field("shap_auto", alias="xaiMethodName")
     output_statistic: str = Field("median", alias="outputStatistic")
     top_k: int = Field(10, alias="topK")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ShapBeeswarmPoint(DBModel):
@@ -172,161 +167,37 @@ class XaiMethodRead(DBModel):
     supported_visualizations: list[str]
 
 
-# ---------------------------------------------------------------------------
-# XAI method registry
-# ---------------------------------------------------------------------------
+class SurrogateQualityRead(DBModel):
+    r_squared: float | None = Field(None, alias="rSquared")
+    mae: float | None = None
+    mape: float | None = None
+    n_samples: int = Field(0, alias="nSamples")
+    n_unique_rows: int = Field(0, alias="nUniqueRows")
+    constant_features: list[str] = Field(default_factory=list, alias="constantFeatures")
+    imputation_rates: dict[str, float] = Field(default_factory=dict, alias="imputationRates")
+    removed_features: list[str] = Field(default_factory=list, alias="removedFeatures")
+    selected_model_type: str | None = Field(None, alias="selectedModelType")
+    selected_model_display_name: str | None = Field(None, alias="selectedModelDisplayName")
+    n_groups: int | None = Field(None, alias="nGroups")
+    fidelity_tier: str | None = Field(None, alias="fidelityTier")
+    fidelity_warning: str | None = Field(None, alias="fidelityWarning")
+    residual_mean: float | None = Field(None, alias="residualMean")
+    residual_std: float | None = Field(None, alias="residualStd")
+    target_transformed: bool = Field(False, alias="targetTransformed")
+    target_transform_method: str | None = Field(None, alias="targetTransformMethod")
+    permutation_removed_features: list[str] = Field(default_factory=list, alias="permutationRemovedFeatures")
+    r_squared_train: float | None = Field(None, alias="rSquaredTrain")
 
-_XAI_METHODS: list[XaiMethodRead] = [
-    XaiMethodRead(
-        id=1,
-        name="shap_auto",
-        display_name="SHAP \u2014 Auto (best surrogate)",
-        description=(
-            "Automatically benchmarks all available surrogate models using leave-one-out R\u00b2 "
-            "(XGBoost, LightGBM, Histogram Gradient Boosting, Random Forest, and others), "
-            "tunes the top candidates with Optuna, and applies TreeSHAP for exact, "
-            "additive feature attributions. Recommended for most use cases."
-        ),
-        method_type="surrogate_shap_auto",
-        author="CHAP",
-        archived=False,
-        supported_visualizations=["importance", "waterfall", "beeswarm"],
-    ),
-    XaiMethodRead(
-        id=2,
-        name="shap_xgboost",
-        display_name="SHAP \u2014 XGBoost",
-        description=(
-            "Fits an XGBoost surrogate on stored predictions, then applies TreeSHAP "
-            "for exact, additive feature attributions. Often the most accurate surrogate "
-            "for structured tabular data."
-        ),
-        method_type="surrogate_shap",
-        author="CHAP",
-        archived=False,
-        supported_visualizations=["importance", "waterfall", "beeswarm"],
-    ),
-    XaiMethodRead(
-        id=3,
-        name="shap_lightgbm",
-        display_name="SHAP \u2014 LightGBM",
-        description=(
-            "Fits a LightGBM surrogate on stored predictions, then applies TreeSHAP "
-            "for exact, additive feature attributions. Fast training with strong accuracy."
-        ),
-        method_type="surrogate_shap",
-        author="CHAP",
-        archived=False,
-        supported_visualizations=["importance", "waterfall", "beeswarm"],
-    ),
-    XaiMethodRead(
-        id=4,
-        name="shap_hist_gradient_boosting",
-        display_name="SHAP \u2014 Histogram Gradient Boosting",
-        description=(
-            "Fits a scikit-learn HistGradientBoostingRegressor surrogate on stored predictions, "
-            "then applies TreeSHAP for exact feature attributions. Native missing-value support."
-        ),
-        method_type="surrogate_shap",
-        author="CHAP",
-        archived=False,
-        supported_visualizations=["importance", "waterfall", "beeswarm"],
-    ),
-    XaiMethodRead(
-        id=5,
-        name="shap_random_forest",
-        display_name="SHAP \u2014 Random Forest",
-        description=(
-            "Fits a Random Forest surrogate on stored predictions, "
-            "then applies TreeSHAP for exact, additive feature attributions."
-        ),
-        method_type="surrogate_shap",
-        author="CHAP",
-        archived=False,
-        supported_visualizations=["importance", "waterfall", "beeswarm"],
-    ),
-    XaiMethodRead(
-        id=6,
-        name="shap_gradient_boosting",
-        display_name="SHAP \u2014 Gradient Boosted Trees (sklearn)",
-        description=(
-            "Fits a scikit-learn GradientBoostingRegressor surrogate on stored predictions, "
-            "then applies TreeSHAP for exact feature attributions."
-        ),
-        method_type="surrogate_shap",
-        author="CHAP",
-        archived=False,
-        supported_visualizations=["importance", "waterfall", "beeswarm"],
-    ),
-    XaiMethodRead(
-        id=7,
-        name="shap_extra_trees",
-        display_name="SHAP \u2014 Extra Trees",
-        description=(
-            "Fits an Extra Trees surrogate on stored predictions, "
-            "then applies TreeSHAP for exact, additive feature attributions. "
-            "Faster training than Random Forest with comparable accuracy."
-        ),
-        method_type="surrogate_shap",
-        author="CHAP",
-        archived=False,
-        supported_visualizations=["importance", "waterfall", "beeswarm"],
-    ),
-    XaiMethodRead(
-        id=8,
-        name="lime_auto",
-        display_name="LIME \u2014 Auto (best surrogate)",
-        description=(
-            "Automatically selects the surrogate model with the best leave-one-out R\u00b2, "
-            "then applies LIME for local, per-instance feature attribution."
-        ),
-        method_type="surrogate_lime_auto",
-        author="CHAP",
-        archived=False,
-        supported_visualizations=["importance"],
-    ),
-    XaiMethodRead(
-        id=9,
-        name="lime",
-        display_name="LIME \u2014 Local Explanations",
-        description=(
-            "Applies LIME (Local Interpretable Model-agnostic Explanations) on a surrogate "
-            "to explain individual predictions as a weighted feature bar chart."
-        ),
-        method_type="surrogate_lime",
-        author="CHAP",
-        archived=False,
-        supported_visualizations=["importance"],
-    ),
-    XaiMethodRead(
-        id=10,
-        name="occlusion",
-        display_name="Permutation Importance",
-        description=(
-            "Estimates feature importance by permuting each feature and measuring "
-            "the resulting change in predictions."
-        ),
-        method_type="perturbation",
-        author="CHAP",
-        archived=True,
-        supported_visualizations=["importance"],
-    ),
-    XaiMethodRead(
-        id=11,
-        name="native_shap",
-        display_name="SHAP \u2014 Native (from model)",
-        description=(
-            "Uses SHAP values computed directly by the prediction model. "
-            "No surrogate approximation is needed \u2014 these are exact attributions "
-            "from the model itself. Only available when the model provides native SHAP output."
-        ),
-        method_type="native_shap",
-        author="Model",
-        archived=False,
-        supported_visualizations=["importance", "waterfall", "beeswarm"],
-    ),
-]
+    model_config = ConfigDict(populate_by_name=True)
 
+
+@dataclass
+class ForecastLookupRow:
+    org_unit: str
+    period: str
+
+
+_XAI_METHODS = [XaiMethodRead(**definition) for definition in XAI_METHOD_DEFINITIONS]
 _XAI_METHOD_BY_NAME = {m.name: m for m in _XAI_METHODS}
 
 # Maps xai_method name -> surrogate model_type for SurrogateSHAPExplainer
@@ -348,31 +219,10 @@ _METHOD_TO_MODEL_TYPE: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 
-def _camel_quality(quality: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Convert surrogate quality dict keys to camelCase for the frontend."""
+def _quality_response_dict(quality: dict[str, Any] | None) -> dict[str, Any] | None:
     if not quality:
         return None
-    return {
-        "rSquared": quality.get("r_squared"),
-        "mae": quality.get("mae"),
-        "mape": quality.get("mape"),
-        "nSamples": quality.get("n_samples", 0),
-        "nUniqueRows": quality.get("n_unique_rows", 0),
-        "constantFeatures": quality.get("constant_features", []),
-        "imputationRates": quality.get("imputation_rates", {}),
-        "removedFeatures": quality.get("removed_features", []),
-        "selectedModelType": quality.get("selected_model_type"),
-        "selectedModelDisplayName": quality.get("selected_model_display_name"),
-        "nGroups": quality.get("n_groups"),
-        "fidelityTier": quality.get("fidelity_tier"),
-        "fidelityWarning": quality.get("fidelity_warning"),
-        "residualMean": quality.get("residual_mean"),
-        "residualStd": quality.get("residual_std"),
-        "targetTransformed": quality.get("target_transformed", False),
-        "targetTransformMethod": quality.get("target_transform_method"),
-        "permutationRemovedFeatures": quality.get("permutation_removed_features", []),
-        "rSquaredTrain": quality.get("r_squared_train"),
-    }
+    return SurrogateQualityRead.model_validate(quality).model_dump(by_alias=True)
 
 
 # ---------------------------------------------------------------------------
@@ -489,14 +339,16 @@ def _fit_surrogate(
 
     # Step 1: Filter features (constant removal, imputation removal, permutation selection)
     fr = filter_features(
-        X, y, feature_names, imputation_rates, model_type=model_type,
+        X,
+        y,
+        feature_names,
+        imputation_rates,
+        model_type=model_type,
     )
     X_filtered = fr.X_filtered
     kept_feature_names = fr.kept_feature_names
 
-    status_logger.info(
-        "Building surrogate on %d forecasts, features: %s", len(X_filtered), kept_feature_names
-    )
+    status_logger.info("Building surrogate on %d forecasts, features: %s", len(X_filtered), kept_feature_names)
 
     n_rows = len(X_filtered)
     if n_rows >= 200:
@@ -573,7 +425,9 @@ def _has_native_shap(prediction: Any) -> bool:
     return bool((prediction.meta_data or {}).get("native_shap"))
 
 
-def _native_shap_global_response(prediction_id: int, prediction: Any, xai_method: str) -> GlobalExplanationResponse | None:
+def _native_shap_global_response(
+    prediction_id: int, prediction: Any, xai_method: str
+) -> GlobalExplanationResponse | None:
     """Return a GlobalExplanationResponse from stored native SHAP metadata, or None."""
     entry = (prediction.meta_data or {}).get("xai", {}).get("global_by_method", {}).get(xai_method)
     if entry is None:
@@ -605,10 +459,9 @@ def _native_shap_local_response(
     feature_names = native_shap.get("feature_names", [])
     values = native_shap.get("values", [])
     shap_rows = [
-        SimpleNamespace(org_unit=v.get("location"), period=str(v.get("time_period", "")))
-        for v in values
+        ForecastLookupRow(org_unit=v.get("location", ""), period=str(v.get("time_period", ""))) for v in values
     ]
-    idx = _find_instance_idx(shap_rows, org_unit, period)
+    idx = find_forecast_row_index(shap_rows, org_unit, period)
     entry = values[idx] if idx is not None and 0 <= idx < len(values) else None
 
     if entry is None:
@@ -625,7 +478,7 @@ def _native_shap_local_response(
             "direction": "positive" if shap_vals[i] >= 0 else "negative",
             "baseline_value": None,
             "actual_value": (
-                float(feature_values.get(fn)) if feature_values.get(fn) is not None else None
+                float(raw_feature_value) if (raw_feature_value := feature_values.get(fn)) is not None else None
             ),
         }
         for i, fn in enumerate(feature_names)
@@ -798,7 +651,7 @@ def _run_explanations_task(
         "computedAt": global_exp.computed_at.isoformat(),
         "nSamples": global_exp.n_samples,
         "stabilityScore": global_exp.stability_score,
-        "surrogateQuality": _camel_quality(quality),
+        "surrogateQuality": _quality_response_dict(quality),
     }
     prediction.meta_data = meta_data
     flag_modified(prediction, "meta_data")
@@ -834,7 +687,7 @@ def _run_explanations_task(
                 "baseline_prediction": local_exp.baseline_prediction,
                 "actual_prediction": local_exp.actual_prediction,
                 "xai_method_name": xai_method_name,
-                "surrogate_quality": _camel_quality(quality),
+                "surrogate_quality": _quality_response_dict(quality),
                 "covariate_provenance": covariate_provenance_rows[idx],
             },
             status="completed",
@@ -852,6 +705,7 @@ def _run_explanations_task(
 @router.post(
     "/predictions/{predictionId}/explanations/run",
     response_model=JobResponse,
+    response_model_by_alias=True,
 )
 async def run_explanations(
     prediction_id: Annotated[int, Path(alias="predictionId")],
@@ -875,7 +729,11 @@ async def run_explanations(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/predictions/{predictionId}/global", response_model=GlobalExplanationResponse)
+@router.get(
+    "/predictions/{predictionId}/global",
+    response_model=GlobalExplanationResponse,
+    response_model_by_alias=True,
+)
 async def get_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     xai_method: str | None = Query(None, alias="xaiMethod"),
@@ -916,7 +774,11 @@ async def get_global_explanation(
     )
 
 
-@router.post("/predictions/{predictionId}/global", response_model=GlobalExplanationResponse)
+@router.post(
+    "/predictions/{predictionId}/global",
+    response_model=GlobalExplanationResponse,
+    response_model_by_alias=True,
+)
 async def compute_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     top_k: int = Query(10, alias="topK"),
@@ -964,14 +826,10 @@ async def compute_global_explanation(
             return resp
 
         if xai_method == "occlusion":
-            return await _compute_global_occlusion(
-                prediction, forecasts, dataset, feature_names, top_k, session
-            )
+            return _compute_global_occlusion(prediction, forecasts, dataset, feature_names, top_k, session)
 
         model_type = _METHOD_TO_MODEL_TYPE.get(xai_method, "auto")
-        X, y, groups, imputation_rates, _ = _build_surrogate_data(
-            forecasts, dataset, feature_names, output_statistic
-        )
+        X, y, groups, imputation_rates, _ = _build_surrogate_data(forecasts, dataset, feature_names, output_statistic)
         cache_key = (prediction_id, xai_method, output_statistic)
         explainer = _fit_surrogate(X, y, groups, model_type, feature_names, imputation_rates, cache_key=cache_key)
         global_exp = explainer.explain_global(X, top_k=top_k)
@@ -1005,10 +863,10 @@ async def compute_global_explanation(
         raise
     except Exception as e:
         logger.exception("Error computing global explanation: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error computing explanation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error computing explanation: {e!s}") from e
 
 
-async def _compute_global_occlusion(
+def _compute_global_occlusion(
     prediction: Any,
     forecasts: list,
     dataset: Any,
@@ -1038,15 +896,9 @@ async def _compute_global_occlusion(
 
     feature_means = {f: np.mean(X[f]) for f in feature_names}
     feature_stds = {f: np.std(X[f]) or 1.0 for f in feature_names}
-    original_normalized = {
-        f: (X[f] - feature_means[f]) / feature_stds[f] for f in feature_names
-    }
+    original_normalized = {f: (X[f] - feature_means[f]) / feature_stds[f] for f in feature_names}
     raw_weights = {
-        f: (
-            float(np.abs(np.corrcoef(X[f], median_values)[0, 1]))
-            if feature_stds[f] > 0
-            else 0.0
-        )
+        f: (float(np.abs(np.corrcoef(X[f], median_values)[0, 1])) if feature_stds[f] > 0 else 0.0)
         for f in feature_names
     }
     raw_weights = {f: v if not np.isnan(v) else 0.1 for f, v in raw_weights.items()}
@@ -1101,7 +953,11 @@ async def _compute_global_occlusion(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/predictions/{predictionId}/local", response_model=list[LocalExplanationResponse])
+@router.get(
+    "/predictions/{predictionId}/local",
+    response_model=list[LocalExplanationResponse],
+    response_model_by_alias=True,
+)
 async def list_local_explanations(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     org_unit: str | None = Query(None, alias="orgUnit"),
@@ -1122,7 +978,7 @@ async def list_local_explanations(
         # the calendar period derived from the horizon-step id.
         canonical_period = period
         if xai_method != "native_shap" and "_" in period and org_unit and prediction.forecasts:
-            idx = _find_instance_idx(prediction.forecasts, org_unit, period)
+            idx = find_forecast_row_index(prediction.forecasts, org_unit, period)
             if idx is not None:
                 canonical_period = prediction.forecasts[idx].period
         query = query.where(PredictionExplanation.period == canonical_period)
@@ -1173,8 +1029,8 @@ async def list_local_explanations(
                                 "direction": "positive" if shap_vals[i] >= 0 else "negative",
                                 "baseline_value": None,
                                 "actual_value": (
-                                    float(feature_values.get(fn))
-                                    if feature_values.get(fn) is not None
+                                    float(raw_feature_value)
+                                    if (raw_feature_value := feature_values.get(fn)) is not None
                                     else None
                                 ),
                             }
@@ -1192,7 +1048,11 @@ async def list_local_explanations(
     return [_explanation_to_response(exp) for exp in explanations]
 
 
-@router.post("/predictions/{predictionId}/local", response_model=LocalExplanationResponse)
+@router.post(
+    "/predictions/{predictionId}/local",
+    response_model=LocalExplanationResponse,
+    response_model_by_alias=True,
+)
 async def compute_local_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     request: LocalExplanationRequest,
@@ -1208,7 +1068,7 @@ async def compute_local_explanation(
 
     # Resolve canonical stored period: forecasts may store calendar periods like "202406"
     # while the request arrives with a horizon-step ID like "202405_1".
-    instance_idx = _find_instance_idx(all_forecasts, request.org_unit, request.period)
+    instance_idx = find_forecast_row_index(all_forecasts, request.org_unit, request.period)
     canonical_period = all_forecasts[instance_idx].period if instance_idx is not None else request.period
 
     existing = session.exec(
@@ -1255,9 +1115,7 @@ async def compute_local_explanation(
             return resp
 
         if request.xai_method == "occlusion":
-            return await _compute_local_occlusion(
-                prediction_id, request, all_forecasts, dataset, feature_names, session
-            )
+            return _compute_local_occlusion(prediction_id, request, all_forecasts, dataset, feature_names, session)
 
         # --- Surrogate path (shap_* and lime) ---
         model_type = _METHOD_TO_MODEL_TYPE.get(request.xai_method, "auto")
@@ -1265,7 +1123,9 @@ async def compute_local_explanation(
             all_forecasts, dataset, feature_names, request.output_statistic
         )
         cache_key = (prediction_id, request.xai_method, request.output_statistic)
-        explainer = _fit_surrogate(X, y, groups, model_type, feature_names, imputation_rates, request.xai_method, cache_key=cache_key)
+        explainer = _fit_surrogate(
+            X, y, groups, model_type, feature_names, imputation_rates, request.xai_method, cache_key=cache_key
+        )
 
         target_forecast = all_forecasts[instance_idx]
         samples = np.array(target_forecast.values, dtype=float)
@@ -1315,10 +1175,10 @@ async def compute_local_explanation(
         raise
     except Exception as e:
         logger.exception("Error computing local explanation: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error computing explanation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error computing explanation: {e!s}") from e
 
 
-async def _compute_local_occlusion(
+def _compute_local_occlusion(
     prediction_id: int,
     request: LocalExplanationRequest,
     all_forecasts: list,
@@ -1329,7 +1189,7 @@ async def _compute_local_occlusion(
     """Legacy PerturbationExplainer path for the occlusion method."""
     from chap_core.xai import PerturbationExplainer
 
-    instance_idx = _find_instance_idx(all_forecasts, request.org_unit, request.period)
+    instance_idx = find_forecast_row_index(all_forecasts, request.org_unit, request.period)
     forecasts_for_unit = [f for f in all_forecasts if f.org_unit == request.org_unit]
     target_forecast = all_forecasts[instance_idx] if instance_idx is not None else None
     if target_forecast is None:
@@ -1362,9 +1222,7 @@ async def _compute_local_occlusion(
     feature_means = {f: np.mean(X[f]) for f in feature_names}
     feature_stds = {f: np.std(X[f]) or 1.0 for f in feature_names}
     original_normalized = {f: (X[f] - feature_means[f]) / feature_stds[f] for f in feature_names}
-    raw_weights = {
-        f: min(feature_stds[f] / (abs(feature_means[f]) + 1e-10), 1.0) for f in feature_names
-    }
+    raw_weights = {f: min(feature_stds[f] / (abs(feature_means[f]) + 1e-10), 1.0) for f in feature_names}
     total = sum(raw_weights.values()) or 1.0
     feature_weights = {f: v / total for f, v in raw_weights.items()}
     base_values = np.full(n_samples, actual_value)
@@ -1418,7 +1276,7 @@ async def _compute_local_occlusion(
 def _beeswarm_from_stored(
     prediction_id: int,
     output_statistic: str,
-    explanations: list,
+    explanations: Sequence[PredictionExplanation],
 ) -> ShapBeeswarmResponse:
     """Build a beeswarm response from stored PredictionExplanation rows."""
     points: list[ShapBeeswarmPoint] = []
@@ -1502,9 +1360,7 @@ async def compute_shap_beeswarm(
             return resp
 
         model_type = _METHOD_TO_MODEL_TYPE.get(xai_method, "auto")
-        X, y, groups, imputation_rates, _ = _build_surrogate_data(
-            forecasts, dataset, feature_names, output_statistic
-        )
+        X, y, groups, imputation_rates, _ = _build_surrogate_data(forecasts, dataset, feature_names, output_statistic)
         explainer = _fit_surrogate(X, y, groups, model_type, feature_names, imputation_rates, xai_method)
 
         points: list[ShapBeeswarmPoint] = []
@@ -1540,14 +1396,14 @@ async def compute_shap_beeswarm(
             output_statistic=output_statistic,
             feature_names=feature_names,
             points=points,
-            surrogate_quality=_camel_quality(explainer.quality_dict()),
+            surrogate_quality=_quality_response_dict(explainer.quality_dict()),
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Error computing SHAP beeswarm: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error computing beeswarm: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error computing beeswarm: {e!s}") from e
 
 
 # ---------------------------------------------------------------------------
@@ -1560,7 +1416,7 @@ def _horizon_summary_from_stored(
     org_unit: str,
     method: str,
     output_statistic: str,
-    stored: list,
+    stored: Sequence[PredictionExplanation],
 ) -> HorizonSummaryResponse:
     """Build a HorizonSummaryResponse from stored PredictionExplanation rows."""
     stored_sorted = sorted(stored, key=lambda e: e.period)
@@ -1673,9 +1529,7 @@ async def compute_horizon_summary(
             )
 
         model_type = _METHOD_TO_MODEL_TYPE.get(xai_method, "auto")
-        X, y, groups, imputation_rates, _ = _build_surrogate_data(
-            forecasts, dataset, feature_names, output_statistic
-        )
+        X, y, groups, imputation_rates, _ = _build_surrogate_data(forecasts, dataset, feature_names, output_statistic)
         cache_key = (prediction_id, xai_method, output_statistic)
         explainer = _fit_surrogate(X, y, groups, model_type, feature_names, imputation_rates, cache_key=cache_key)
 
@@ -1755,14 +1609,14 @@ async def compute_horizon_summary(
             output_statistic=output_statistic,
             steps=steps,
             average_importance=avg_importance,
-            surrogate_quality=_camel_quality(explainer.quality_dict()),
+            surrogate_quality=_quality_response_dict(explainer.quality_dict()),
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.exception("Error computing horizon summary: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error computing horizon summary: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error computing horizon summary: {e!s}") from e
 
 
 # ---------------------------------------------------------------------------
@@ -1773,6 +1627,7 @@ async def compute_horizon_summary(
 @router.get(
     "/predictions/{predictionId}/local/{explanationId}",
     response_model=LocalExplanationResponse,
+    response_model_by_alias=True,
 )
 async def get_local_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],

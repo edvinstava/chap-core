@@ -60,7 +60,7 @@ class PerturbationExplainer:
 
         if len(importances) > 1:
             imp_values = [abs(f.importance) for f in importances]
-            stability = 1.0 - (np.std(imp_values) / (np.mean(imp_values) + 1e-10))
+            stability = 1.0 - float(np.std(imp_values) / (np.mean(imp_values) + 1e-10))
             stability = max(0.0, min(1.0, stability))
         else:
             stability = 1.0
@@ -159,10 +159,10 @@ def create_predict_fn_from_samples(
 ) -> Callable[[dict[str, np.ndarray]], np.ndarray]:
     def predict_fn(X: dict[str, np.ndarray]) -> np.ndarray:
         if output_statistic == "median":
-            return np.median(samples, axis=-1)
+            return np.asarray(np.median(samples, axis=-1))
         elif output_statistic == "mean":
-            return np.mean(samples, axis=-1)
+            return np.asarray(np.mean(samples, axis=-1))
         else:
-            return np.median(samples, axis=-1)
+            return np.asarray(np.median(samples, axis=-1))
 
     return predict_fn

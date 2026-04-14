@@ -1,6 +1,7 @@
 import calendar
 import logging
 import re
+from contextlib import suppress
 from datetime import date
 from typing import Any
 
@@ -32,16 +33,18 @@ def _year_month_from_any(raw: Any) -> tuple[int, int] | None:
     if isinstance(raw, date):
         return (raw.year, raw.month)
     if hasattr(raw, "item"):
-        try:
+        with suppress(Exception):
             raw = raw.item()
-        except Exception:
-            pass
-    if isinstance(raw, (int, float)) and not (isinstance(raw, float) and pd.isna(raw)):
-        if float(raw).is_integer() and 190001 <= int(raw) <= 999912:
-            v = int(raw)
-            s = str(v)
-            if len(s) == 6:
-                return (int(s[:4]), int(s[4:6]))
+    if (
+        isinstance(raw, (int, float))
+        and not (isinstance(raw, float) and pd.isna(raw))
+        and float(raw).is_integer()
+        and 190001 <= int(raw) <= 999912
+    ):
+        v = int(raw)
+        s = str(v)
+        if len(s) == 6:
+            return (int(s[:4]), int(s[4:6]))
     s = str(raw).strip()
     if not s or s.lower() in ("nan", "nat", "none", "<nat>"):
         return None
@@ -93,7 +96,11 @@ def covariate_period_candidates(forecast_period: str) -> list[str]:
     if step_s.isdigit():
         try:
             tp0 = TimePeriod.from_id(base)
+            if tp0 is None:
+                raise ValueError(f"Unsupported period {base}")
             td = tp0.time_delta
+            if td is None:
+                raise ValueError(f"Unsupported time delta for period {base}")
             shifted = (tp0 + td * int(step_s)).id
             ordered.append(str(shifted))
         except Exception:
@@ -133,8 +140,12 @@ def _parse_row_period(raw: Any) -> Month | Week | None:
             key = base
     try:
         if any(x in key for x in ("-W", "-S", "SunW")) or ("W" in key and not key.isdigit()):
-            return TimePeriod.from_id(clean_timestring(key))
-        return TimePeriod.from_id(key)
+            parsed = TimePeriod.from_id(clean_timestring(key))
+        else:
+            parsed = TimePeriod.from_id(key)
+        if isinstance(parsed, Month | Week):
+            return parsed
+        return None
     except Exception:
         return None
 
@@ -213,10 +224,11 @@ def _historical_week_slice(
         if not isinstance(tp, Week) or int(tp.week) != int(target_week):
             continue
         any_year_idx.append(i)
-        years_any.append(tp.year)
-        if tp.year < target_year:
+        year = int(tp.year)
+        years_any.append(year)
+        if year < target_year:
             prior_idx.append(i)
-            years_prior.append(tp.year)
+            years_prior.append(year)
     if prior_idx:
         return loc_df.iloc[prior_idx], sorted(set(years_prior))
     if any_year_idx:
