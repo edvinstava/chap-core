@@ -82,14 +82,16 @@ def fit_surrogate_explainer(
     xai_method_name: str = "",
     cache_key: tuple | None = None,
 ) -> Any:
-    from chap_core.xai.shap_explainer import (
-        MIN_SAMPLES_FOR_TUNING,
-        SurrogateLIMEExplainer,
-        SurrogateSHAPExplainer,
-        filter_features,
-        tune_hyperparameters,
+    from chap_core.xai.lime_explainer import SurrogateLIMEExplainer
+    from chap_core.xai.shap_explainer import SurrogateSHAPExplainer
+
+    MIN_SAMPLES_FOR_TUNING = 15
+    from chap_core.xai.surrogate_model import (
+        auto_select_best_model_type,
+        select_and_tune_best_model_type,
+        tune_surrogate_hyperparameters,
     )
-    from chap_core.xai.surrogate_model import auto_select_best_model_type, select_and_tune_best_model_type
+    from chap_core.xai.surrogate_preprocessing import filter_features
 
     if cache_key is not None:
         cached = get_cached_surrogate(cache_key)
@@ -152,7 +154,7 @@ def fit_surrogate_explainer(
                 effective_model_type,
                 n_trials,
             )
-            hyperparams = tune_hyperparameters(
+            hyperparams = tune_surrogate_hyperparameters(
                 X_filtered, y, model_type=effective_model_type, groups=groups, n_trials=n_trials
             )
             logger.info("Tuned hyperparameters: %s", hyperparams)

@@ -261,9 +261,7 @@ def compute_local_explanation_service(
     explainer = surrogate_context.explainer
     target_forecast = all_forecasts[instance_idx]
     actual_value = forecast_actual_value(target_forecast.values, request.output_statistic)
-    feature_actual_values = {
-        name: float(surrogate_context.X[instance_idx, i]) for i, name in enumerate(feature_names)
-    }
+    feature_actual_values = {name: float(surrogate_context.X[instance_idx, i]) for i, name in enumerate(feature_names)}
     local_exp = explainer.explain_local(
         X=surrogate_context.X,
         instance_idx=instance_idx,
@@ -277,9 +275,7 @@ def compute_local_explanation_service(
     )
     quality = explainer.quality_dict()
     covariate_provenance = None
-    if surrogate_context.covariate_provenance_rows and instance_idx < len(
-        surrogate_context.covariate_provenance_rows
-    ):
+    if surrogate_context.covariate_provenance_rows and instance_idx < len(surrogate_context.covariate_provenance_rows):
         covariate_provenance = surrogate_context.covariate_provenance_rows[instance_idx]
     explanation = build_local_explanation_record(
         prediction_id=prediction_id,

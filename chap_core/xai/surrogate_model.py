@@ -1,283 +1,40 @@
-"""
-Registry of surrogate model types for XAI explainers.
+"""Surrogate model construction, selection, and tuning utilities for XAI."""
 
-SUPPORTED_MODELS is the single source of truth. Each entry defines:
-  - display_name: human-readable name shown in the UI
-  - class_dotted: dotted import path to the sklearn-compatible regressor class
-  - default_params: parameters used when no tuning or overrides are provided
-  - loo_params: simplified parameters for fast leave-one-out cross-validation
-  - tunable_params: Optuna search-space spec (see _suggest_param for format)
-  - shap_type: "tree" or "linear" — determines which SHAP algorithm is used
-  - optional: if True, the model is skipped gracefully when its package is missing
-
-To add a new model type:
-  1. Add an entry to SUPPORTED_MODELS.
-  2. Optionally register a matching XaiMethod in xai_method_seed.py.
-"""
-
+import logging
 from collections.abc import Callable
 from typing import Any
 
 import numpy as np
 
-# ---------------------------------------------------------------------------
-# Model registry
-# ---------------------------------------------------------------------------
+from chap_core.xai.surrogate_model_registry import (
+    DEFAULT_MODEL_TYPE,
+    SUPPORTED_MODELS,
+    get_display_name,
+    get_model_info,
+    is_model_available,
+)
 
-SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
-    "hist_gradient_boosting": {
-        "display_name": "Histogram Gradient Boosting",
-        "class_dotted": "sklearn.ensemble.HistGradientBoostingRegressor",
-        "default_params": {
-            "max_iter": 600,
-            "max_depth": 6,
-            "learning_rate": 0.05,
-            "early_stopping": True,
-            "n_iter_no_change": 20,
-            "validation_fraction": 0.15,
-            "max_leaf_nodes": 31,
-            "l2_regularization": 0.1,
-            "min_samples_leaf": 10,
-        },
-        "loo_params": {"max_iter": 250, "max_depth": 6, "early_stopping": False},
-        "tunable_params": {
-            "max_iter": {"type": "int", "low": 300, "high": 2000},
-            "max_depth": {"type": "int", "low": 2, "high": 12},
-            "learning_rate": {"type": "float", "low": 0.005, "high": 0.2, "log": True},
-            "min_samples_leaf": {"type": "int", "low": 1, "high": None, "high_n_fraction": 4},
-            "max_leaf_nodes": {"type": "int", "low": 15, "high": 255},
-            "l2_regularization": {"type": "float", "low": 0.0, "high": 10.0},
-            "max_features": {"type": "float", "low": 0.3, "high": 1.0},
-        },
-        "shap_type": "tree",
-        "optional": False,
-    },
-    "xgboost": {
-        "display_name": "XGBoost",
-        "class_dotted": "xgboost.XGBRegressor",
-        "default_params": {
-            "n_estimators": 600,
-            "max_depth": 5,
-            "learning_rate": 0.05,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "reg_alpha": 0.1,
-            "reg_lambda": 1.0,
-            "min_child_weight": 3,
-            "verbosity": 0,
-            "eval_metric": "rmse",
-            "early_stopping_rounds": 20,
-        },
-        "loo_params": {
-            "n_estimators": 250,
-            "max_depth": 5,
-            "verbosity": 0,
-        },
-        "tunable_params": {
-            "n_estimators": {"type": "int", "low": 200, "high": 2000},
-            "max_depth": {"type": "int", "low": 2, "high": 12},
-            "learning_rate": {"type": "float", "low": 0.005, "high": 0.3, "log": True},
-            "subsample": {"type": "float", "low": 0.5, "high": 1.0},
-            "colsample_bytree": {"type": "float", "low": 0.4, "high": 1.0},
-            "reg_alpha": {"type": "float", "low": 1e-4, "high": 10.0, "log": True},
-            "reg_lambda": {"type": "float", "low": 1e-4, "high": 10.0, "log": True},
-            "min_child_weight": {"type": "int", "low": 1, "high": None, "high_n_fraction": 5},
-            "gamma": {"type": "float", "low": 0.0, "high": 5.0},
-        },
-        "shap_type": "tree",
-        "optional": True,
-    },
-    "lightgbm": {
-        "display_name": "LightGBM",
-        "class_dotted": "lightgbm.LGBMRegressor",
-        "default_params": {
-            "n_estimators": 600,
-            "max_depth": -1,
-            "num_leaves": 31,
-            "learning_rate": 0.05,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "reg_alpha": 0.1,
-            "reg_lambda": 1.0,
-            "min_child_samples": 10,
-            "verbose": -1,
-        },
-        "loo_params": {
-            "n_estimators": 250,
-            "num_leaves": 20,
-            "verbose": -1,
-        },
-        "tunable_params": {
-            "n_estimators": {"type": "int", "low": 200, "high": 2000},
-            "num_leaves": {"type": "int", "low": 15, "high": 255},
-            "learning_rate": {"type": "float", "low": 0.005, "high": 0.3, "log": True},
-            "subsample": {"type": "float", "low": 0.5, "high": 1.0},
-            "colsample_bytree": {"type": "float", "low": 0.4, "high": 1.0},
-            "reg_alpha": {"type": "float", "low": 1e-4, "high": 10.0, "log": True},
-            "reg_lambda": {"type": "float", "low": 1e-4, "high": 10.0, "log": True},
-            "min_child_samples": {"type": "int", "low": 1, "high": None, "high_n_fraction": 4},
-            "min_split_gain": {"type": "float", "low": 0.0, "high": 1.0},
-        },
-        "shap_type": "tree",
-        "optional": True,
-    },
-    "gradient_boosting": {
-        "display_name": "Gradient Boosted Trees (sklearn)",
-        "class_dotted": "sklearn.ensemble.GradientBoostingRegressor",
-        "default_params": {
-            "n_estimators": 600,
-            "max_depth": 5,
-            "learning_rate": 0.05,
-            "n_iter_no_change": 15,
-            "validation_fraction": 0.15,
-            "subsample": 0.8,
-            "max_features": 0.8,
-            "min_samples_leaf": 5,
-        },
-        "loo_params": {"n_estimators": 150, "max_depth": 4},
-        "tunable_params": {
-            "n_estimators": {"type": "int", "low": 200, "high": 1500},
-            "max_depth": {"type": "int", "low": 2, "high": 8},
-            "learning_rate": {"type": "float", "low": 0.005, "high": 0.2, "log": True},
-            "min_samples_leaf": {"type": "int", "low": 1, "high": None, "high_n_fraction": 5},
-            "subsample": {"type": "float", "low": 0.5, "high": 1.0},
-            "min_samples_split": {"type": "int", "low": 2, "high": None, "high_n_fraction": 10},
-            "max_features": {"type": "float", "low": 0.3, "high": 1.0},
-        },
-        "shap_type": "tree",
-        "optional": False,
-    },
-    "random_forest": {
-        "display_name": "Random Forest",
-        "class_dotted": "sklearn.ensemble.RandomForestRegressor",
-        "default_params": {"n_estimators": 800, "max_depth": None, "min_samples_leaf": 2, "max_features": 0.5},
-        "loo_params": {"n_estimators": 80, "max_depth": 8},
-        "tunable_params": {
-            "n_estimators": {"type": "int", "low": 200, "high": 1200},
-            "max_depth": {"type": "int", "low": 3, "high": 30},
-            "min_samples_leaf": {"type": "int", "low": 1, "high": None, "high_n_fraction": 5},
-            "min_samples_split": {"type": "int", "low": 2, "high": None, "high_n_fraction": 10},
-            "max_features": {"type": "float", "low": 0.2, "high": 1.0},
-        },
-        "shap_type": "tree",
-        "optional": False,
-    },
-    "extra_trees": {
-        "display_name": "Extra Trees",
-        "class_dotted": "sklearn.ensemble.ExtraTreesRegressor",
-        "default_params": {"n_estimators": 800, "max_depth": None, "min_samples_leaf": 2, "max_features": 0.5},
-        "loo_params": {"n_estimators": 80, "max_depth": 8},
-        "tunable_params": {
-            "n_estimators": {"type": "int", "low": 200, "high": 1200},
-            "max_depth": {"type": "int", "low": 3, "high": 30},
-            "min_samples_leaf": {"type": "int", "low": 1, "high": None, "high_n_fraction": 5},
-            "min_samples_split": {"type": "int", "low": 2, "high": None, "high_n_fraction": 10},
-            "max_features": {"type": "float", "low": 0.2, "high": 1.0},
-        },
-        "shap_type": "tree",
-        "optional": False,
-    },
-    "decision_tree": {
-        "display_name": "Decision Tree",
-        "class_dotted": "sklearn.tree.DecisionTreeRegressor",
-        "default_params": {"max_depth": 6, "min_samples_leaf": 2},
-        "loo_params": {"max_depth": 4, "min_samples_leaf": 2},
-        "tunable_params": {
-            "max_depth": {"type": "int", "low": 2, "high": 15},
-            "min_samples_leaf": {"type": "int", "low": 1, "high": None, "high_n_fraction": 5},
-            "min_samples_split": {"type": "int", "low": 2, "high": None, "high_n_fraction": 10},
-            "max_features": {"type": "float", "low": 0.3, "high": 1.0},
-        },
-        "shap_type": "tree",
-        "optional": False,
-    },
-    "ridge": {
-        "display_name": "Ridge Regression",
-        "class_dotted": "sklearn.linear_model.Ridge",
-        "default_params": {"alpha": 1.0},
-        "loo_params": {"alpha": 1.0},
-        "tunable_params": {
-            "alpha": {"type": "float", "low": 0.001, "high": 1000.0, "log": True},
-        },
-        "shap_type": "linear",
-        "optional": False,
-    },
-    "lasso": {
-        "display_name": "Lasso Regression",
-        "class_dotted": "sklearn.linear_model.Lasso",
-        "default_params": {"alpha": 0.1, "max_iter": 10000},
-        "loo_params": {"alpha": 0.1, "max_iter": 5000},
-        "tunable_params": {
-            "alpha": {"type": "float", "low": 0.0001, "high": 100.0, "log": True},
-        },
-        "shap_type": "linear",
-        "optional": False,
-    },
-    "catboost": {
-        "display_name": "CatBoost",
-        "class_dotted": "catboost.CatBoostRegressor",
-        "default_params": {
-            "iterations": 600,
-            "depth": 6,
-            "learning_rate": 0.05,
-            "l2_leaf_reg": 3.0,
-            "min_data_in_leaf": 5,
-            "verbose": 0,
-        },
-        "loo_params": {
-            "iterations": 250,
-            "depth": 5,
-            "verbose": 0,
-        },
-        "tunable_params": {
-            "iterations": {"type": "int", "low": 200, "high": 2000},
-            "depth": {"type": "int", "low": 2, "high": 10},
-            "learning_rate": {"type": "float", "low": 0.005, "high": 0.3, "log": True},
-            "l2_leaf_reg": {"type": "float", "low": 1e-3, "high": 10.0, "log": True},
-            "min_data_in_leaf": {"type": "int", "low": 1, "high": None, "high_n_fraction": 4},
-            "colsample_bylevel": {"type": "float", "low": 0.4, "high": 1.0},
-        },
-        "shap_type": "tree",
-        "optional": True,
-    },
-}
+logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL_TYPE = "hist_gradient_boosting"
-
-# ---------------------------------------------------------------------------
-# Core helpers
-# ---------------------------------------------------------------------------
-
-
-def get_model_info(model_type: str) -> dict[str, Any]:
-    """Return registry entry for model_type, raising ValueError if unknown."""
-    if model_type not in SUPPORTED_MODELS:
-        raise ValueError(f"Unknown surrogate model type '{model_type}'. Supported: {sorted(SUPPORTED_MODELS)}")
-    return SUPPORTED_MODELS[model_type]
-
-
-def get_display_name(model_type: str) -> str:
-    """Return the human-readable display name for a model type."""
-    info = SUPPORTED_MODELS.get(model_type)
-    if info is None:
-        return model_type
-    value = info.get("display_name", model_type)
-    return str(value)
+__all__ = [
+    "DEFAULT_MODEL_TYPE",
+    "SUPPORTED_MODELS",
+    "auto_select_best_model_type",
+    "build_shap_explainer",
+    "build_surrogate_model",
+    "get_display_name",
+    "get_model_info",
+    "make_loo_model_factory",
+    "make_model_factory",
+    "resolve_model_params",
+    "select_and_tune_best_model_type",
+    "tune_surrogate_hyperparameters",
+    "wrap_with_transform",
+]
 
 
 def _is_model_available(model_type: str) -> bool:
-    """Return True if the model's package can be imported."""
-    info = SUPPORTED_MODELS.get(model_type, {})
-    if not info.get("optional", False):
-        return True
-    module_path = info["class_dotted"].rsplit(".", 1)[0]
-    try:
-        import importlib
-
-        importlib.import_module(module_path)
-        return True
-    except (ImportError, OSError):
-        return False
+    return is_model_available(model_type)
 
 
 def build_surrogate_model(
@@ -392,6 +149,85 @@ def build_shap_explainer(model, model_type: str, X_train: np.ndarray | None = No
     raise ValueError(f"Unsupported shap_type '{shap_type}' for model_type '{model_type}'")
 
 
+def _select_target_transform(
+    X: np.ndarray,
+    y: np.ndarray,
+    model_type: str,
+    params: dict,
+    random_state: int,
+    n_fit: int,
+) -> str | None:
+    """Choose the best target transform (None, 'log1p', or 'yeo_johnson') via CV."""
+    try:
+        from sklearn.compose import TransformedTargetRegressor
+        from sklearn.model_selection import cross_val_score as _cvs
+        from sklearn.preprocessing import PowerTransformer
+
+        cv_folds = min(n_fit, 5) if n_fit >= 10 else max(2, n_fit)
+
+        def _make_model():
+            return build_surrogate_model(model_type, params, random_state=random_state, n_samples=n_fit)
+
+        r2_raw = float(np.mean(_cvs(_make_model(), X, y, cv=cv_folds, scoring="r2")))
+        best_r2, best_method = r2_raw, None
+        r2_improvement_threshold = 0.05
+
+        if float(np.min(y)) >= 0.0:
+            r2_log = float(
+                np.mean(
+                    _cvs(
+                        TransformedTargetRegressor(regressor=_make_model(), func=np.log1p, inverse_func=np.expm1),
+                        X,
+                        y,
+                        cv=cv_folds,
+                        scoring="r2",
+                    )
+                )
+            )
+            if r2_log > best_r2 + r2_improvement_threshold:
+                best_r2, best_method = r2_log, "log1p"
+
+        if n_fit >= 10:
+            r2_yj = float(
+                np.mean(
+                    _cvs(
+                        TransformedTargetRegressor(
+                            regressor=_make_model(),
+                            transformer=PowerTransformer(method="yeo-johnson", standardize=False),
+                        ),
+                        X,
+                        y,
+                        cv=cv_folds,
+                        scoring="r2",
+                    )
+                )
+            )
+            if r2_yj > best_r2 + r2_improvement_threshold:
+                best_r2, best_method = r2_yj, "yeo_johnson"
+
+        return best_method
+    except Exception as e:
+        logger.debug("Target-transform check failed, using raw y: %s", e)
+        return None
+
+
+def wrap_with_transform(base_model: Any, transform_method: str | None) -> Any:
+    """Wrap *base_model* with a TransformedTargetRegressor if *transform_method* is set."""
+    if transform_method == "log1p":
+        from sklearn.compose import TransformedTargetRegressor
+
+        return TransformedTargetRegressor(regressor=base_model, func=np.log1p, inverse_func=np.expm1)
+    if transform_method == "yeo_johnson":
+        from sklearn.compose import TransformedTargetRegressor
+        from sklearn.preprocessing import PowerTransformer
+
+        return TransformedTargetRegressor(
+            regressor=base_model,
+            transformer=PowerTransformer(method="yeo-johnson", standardize=False),
+        )
+    return base_model
+
+
 # ---------------------------------------------------------------------------
 # Auto-select best surrogate
 # ---------------------------------------------------------------------------
@@ -470,10 +306,6 @@ def auto_select_best_model_type(
     Falls back to ``[DEFAULT_MODEL_TYPE]`` if no model can be evaluated
     (e.g. too few samples).
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     ranked: list[tuple[float, str]] = []
 
     for model_type in SUPPORTED_MODELS:
@@ -638,10 +470,6 @@ def select_and_tune_best_model_type(
     Falls back to the LOO winner with empty params when tuning fails for all
     candidates.
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     candidates = auto_select_best_model_type(X, y, groups=groups, random_state=random_state)
     n_candidates = min(3, len(candidates))
     candidates = candidates[:n_candidates]
