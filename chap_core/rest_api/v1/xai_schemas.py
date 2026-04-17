@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -8,7 +7,7 @@ from chap_core.database.base_tables import DBModel
 
 class GlobalExplanationResponse(DBModel):
     method: str
-    top_features: list[dict]
+    top_features: list[dict[str, Any]]
     computed_at: str | None = None
     n_samples: int = 0
     stability_score: float | None = None
@@ -134,9 +133,3 @@ class SurrogateQualityRead(DBModel):
     r_squared_train: float | None = Field(None, alias="rSquaredTrain")
 
     model_config = ConfigDict(populate_by_name=True)
-
-
-@dataclass
-class ForecastLookupRow:
-    org_unit: str
-    period: str

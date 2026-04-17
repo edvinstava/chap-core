@@ -4,12 +4,12 @@ import numpy as np
 import pandas as pd
 
 from chap_core.rest_api.v1.xai_schemas import (
-    ForecastLookupRow,
     GlobalExplanationResponse,
     LocalExplanationResponse,
     ShapBeeswarmPoint,
     ShapBeeswarmResponse,
 )
+from chap_core.xai.types import ForecastLookupRow
 
 from ..covariate_fallback import resolve_covariate_row
 from ..forecast_matching import find_forecast_row_index

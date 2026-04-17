@@ -188,7 +188,7 @@ def target_signature(forecast_period: str) -> tuple[str, int, int] | None:
     return None
 
 
-def _historical_month_slice_fixed(
+def _historical_month_slice(
     loc_df: pd.DataFrame, period_col: str, target_year: int, target_month: int
 ) -> tuple[pd.DataFrame, list[int]]:
     prior_idx: list[int] = []
@@ -292,7 +292,7 @@ def resolve_covariate_row(
     if sig is not None and period_col in loc_df.columns and not loc_df.empty:
         kind, y, m_or_w = sig
         if kind == "month":
-            sub, years_used = _historical_month_slice_fixed(loc_df, period_col, y, m_or_w)
+            sub, years_used = _historical_month_slice(loc_df, period_col, y, m_or_w)
             if not sub.empty:
                 row = _aggregate_features(sub, feature_names)
                 mon_name = calendar.month_name[m_or_w]

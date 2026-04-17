@@ -1,6 +1,9 @@
 """Surrogate model construction, selection, and tuning utilities for XAI."""
 
+import importlib
+import inspect
 import logging
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -65,13 +68,9 @@ def build_surrogate_model(
                 effective_params[key] = min(effective_params[key], 200)
 
     module_path, class_name = info["class_dotted"].rsplit(".", 1)
-    import importlib
-
     cls = getattr(importlib.import_module(module_path), class_name)
     # Ridge, Lasso, and some linear models don't accept random_state.
     # CatBoost uses random_seed instead of random_state.
-    import inspect
-
     sig_params = inspect.signature(cls).parameters
     if "random_state" in sig_params:
         return cls(random_state=random_state, **effective_params)
@@ -256,8 +255,6 @@ def _loo_r2(
         if len(unique_groups) >= 2:
             use_logo = True
 
-    import warnings
-
     if use_logo:
         for g in unique_groups:
             test_mask = groups == g
@@ -396,8 +393,6 @@ def _run_tuning_study(
         )
         split_kwargs = {"groups": effective_groups} if effective_groups is not None else {}
         splits = list(cv_splitter.split(X, y, **split_kwargs))
-        import warnings
-
         scores: list[float] = []
         for fold_idx, (train_idx, test_idx) in enumerate(splits):
             m = model_template()

@@ -1,13 +1,10 @@
-import numpy as np
-from sqlalchemy.orm.attributes import flag_modified
-
 from chap_core.database.database import SessionWrapper
 from chap_core.database.tables import Prediction
 from chap_core.database.xai_tables import PredictionExplanation
 from chap_core.log_config import get_status_logger
 from chap_core.xai.responses.native_shap import has_native_shap
 from chap_core.xai.responses.quality import quality_response_dict
-from chap_core.xai.router_services import resolve_feature_names
+from chap_core.xai.router_services import forecast_actual_value, persist_global_entry, resolve_feature_names
 from chap_core.xai.surrogate.methods import METHOD_TO_MODEL_TYPE
 from chap_core.xai.surrogate.pipeline import build_surrogate_data, fit_surrogate_explainer
 
@@ -62,22 +59,11 @@ def run_explanations_task(
 
     status_logger.info("Computing global explanation...")
     global_exp = explainer.explain_global(X, top_k=top_k)
-    meta_data = dict(prediction.meta_data) if prediction.meta_data else {}
-    meta_data.setdefault("xai", {}).setdefault("global_by_method", {})[xai_method_name] = {
-        "topFeatures": [f.model_dump() for f in global_exp.top_features],
-        "computedAt": global_exp.computed_at.isoformat(),
-        "nSamples": global_exp.n_samples,
-        "stabilityScore": global_exp.stability_score,
-        "surrogateQuality": quality_response_dict(quality),
-    }
-    prediction.meta_data = meta_data
-    flag_modified(prediction, "meta_data")
-    session.session.add(prediction)
+    persist_global_entry(session.session, prediction, xai_method_name, global_exp, quality)
 
     status_logger.info("Computing %d local explanations (method=%s)...", len(forecasts), xai_method_name)
     for idx, fc in enumerate(forecasts):
-        samples = np.array(fc.values, dtype=float)
-        actual_value = float(np.mean(samples) if output_statistic == "mean" else np.median(samples))
+        actual_value = forecast_actual_value(fc.values, output_statistic)
         feature_actual_values = {name: float(X[idx, i]) for i, name in enumerate(feature_names)}
 
         local_exp = explainer.explain_local(

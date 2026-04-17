@@ -458,7 +458,7 @@ class SurrogateSHAPExplainer:
             X_f = self._filter_X(X)
             iv_filtered = self._shap_explainer.shap_interaction_values(X_f[instance_idx : instance_idx + 1])[0]
         except Exception as e:
-            logger.warning(f"SHAP interaction values not available: {e}")
+            logger.warning("SHAP interaction values not available: %s", e)
             return []
 
         n_feats = len(self.feature_names)

@@ -8,13 +8,9 @@ from chap_core.rest_api.v1.xai_schemas import (
     HorizonStepSummary,
     HorizonSummaryResponse,
 )
+from chap_core.xai.router_services import forecast_actual_value
 
 from .quality import quality_response_dict
-
-
-def forecast_actual_value(values: list[float], output_statistic: str) -> float:
-    samples = np.array(values, dtype=float)
-    return float(np.mean(samples) if output_statistic == "mean" else np.median(samples))
 
 
 def horizon_summary_from_surrogate(

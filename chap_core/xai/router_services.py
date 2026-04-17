@@ -11,6 +11,7 @@ from chap_core.database.tables import Prediction
 from chap_core.rest_api.v1.xai_schemas import (
     GlobalExplanationResponse,
     HorizonSummaryResponse,
+    LocalExplanationRequest,
     LocalExplanationResponse,
     ShapBeeswarmPoint,
     ShapBeeswarmResponse,
@@ -149,7 +150,15 @@ def build_surrogate_context(
 
 def forecast_actual_value(values: list[float], output_statistic: str) -> float:
     samples = np.array(values, dtype=float)
-    return float(np.mean(samples) if output_statistic == "mean" else np.median(samples))
+    if output_statistic == "mean":
+        return float(np.mean(samples))
+    if output_statistic.startswith("q"):
+        try:
+            q = float(output_statistic[1:]) / 100.0
+        except ValueError:
+            q = 0.5
+        return float(np.quantile(samples, q))
+    return float(np.median(samples))
 
 
 def build_surrogate_beeswarm_response(
@@ -241,7 +250,7 @@ def compute_local_explanation_service(
     prediction_id: int,
     instance_idx: int,
     canonical_period: str,
-    request: Any,
+    request: LocalExplanationRequest,
 ) -> LocalExplanationResponse:
     all_forecasts = prediction.forecasts
     dataset = SessionWrapper(session=session).get_dataset(prediction.dataset_id)
