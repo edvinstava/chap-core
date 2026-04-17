@@ -13,7 +13,8 @@ from chap_core.rest_api.v1.xai_schemas import (
     ShapBeeswarmPoint,
     ShapBeeswarmResponse,
 )
-from chap_core.xai.response_quality import quality_response_dict
+
+from .quality import quality_response_dict
 
 
 def explanation_to_response(exp: PredictionExplanation) -> LocalExplanationResponse:

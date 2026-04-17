@@ -10,14 +10,14 @@ from typing import Any
 
 import numpy as np
 
-from .surrogate_model import (
+from .model import (
     _loo_r2,
     _select_target_transform,
     build_surrogate_model,
     get_model_info,
     wrap_with_transform,
 )
-from .surrogate_quality import SurrogateQuality, compute_surrogate_quality
+from .quality import SurrogateQuality, compute_surrogate_quality
 
 logger = logging.getLogger(__name__)
 

@@ -3,8 +3,8 @@ from typing import Any
 
 import numpy as np
 
-from chap_core.xai.covariate_fallback import _target_signature, _year_month_from_any
-from chap_core.xai.forecast_matching import find_forecast_row_index, norm_period_id
+from ..covariate_fallback import target_signature, year_month_from_any
+from ..forecast_matching import find_forecast_row_index, norm_period_id
 
 
 def _find_native_value_row(
@@ -26,10 +26,10 @@ def _find_native_value_row(
     native_period = str(matched.get("time_period", ""))
     if norm_period_id(native_period) == norm_period_id(period):
         return matched
-    sig = _target_signature(period)
+    sig = target_signature(period)
     if sig is not None and sig[0] == "month":
         _, target_year, target_month = sig
-        ym = _year_month_from_any(native_period)
+        ym = year_month_from_any(native_period)
         if ym == (target_year, target_month):
             return matched
     return None

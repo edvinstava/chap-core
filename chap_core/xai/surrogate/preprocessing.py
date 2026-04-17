@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .surrogate_model import DEFAULT_MODEL_TYPE, make_loo_model_factory
+from .model import DEFAULT_MODEL_TYPE, make_loo_model_factory
 
 logger = logging.getLogger(__name__)
 

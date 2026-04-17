@@ -17,19 +17,19 @@ from chap_core.rest_api.v1.xai_schemas import (
 )
 from chap_core.xai.forecast_matching import find_forecast_row_index
 from chap_core.xai.method_registry import XAI_METHODS
-from chap_core.xai.native_shap_horizon import build_native_shap_horizon_summary
-from chap_core.xai.native_shap_responses import (
+from chap_core.xai.responses.native_shap import (
     native_shap_beeswarm,
     native_shap_global_response,
     native_shap_local_response,
 )
-from chap_core.xai.response_quality import quality_response_dict
-from chap_core.xai.stored_explanation_views import (
+from chap_core.xai.responses.native_shap_horizon import build_native_shap_horizon_summary
+from chap_core.xai.responses.quality import quality_response_dict
+from chap_core.xai.responses.stored_views import (
     build_local_explanation_record,
     explanation_to_response,
 )
-from chap_core.xai.surrogate_methods import METHOD_TO_MODEL_TYPE
-from chap_core.xai.surrogate_pipeline import build_surrogate_data, fit_surrogate_explainer
+from chap_core.xai.surrogate.methods import METHOD_TO_MODEL_TYPE
+from chap_core.xai.surrogate.pipeline import build_surrogate_data, fit_surrogate_explainer
 
 _XAI_METHOD_DEFINITIONS_BY_NAME = {method["name"]: method for method in XAI_METHODS}
 _NON_FEATURE_FIELDS = {"time_period", "period", "date", "location"}
@@ -328,7 +328,7 @@ def compute_horizon_summary_service(
     output_statistic: str,
     xai_method: str,
 ) -> HorizonSummaryResponse:
-    from chap_core.xai.surrogate_horizon import horizon_summary_from_surrogate
+    from chap_core.xai.responses.surrogate_horizon import horizon_summary_from_surrogate
 
     forecasts = prediction.forecasts
 

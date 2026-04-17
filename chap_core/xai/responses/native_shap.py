@@ -10,8 +10,9 @@ from chap_core.rest_api.v1.xai_schemas import (
     ShapBeeswarmPoint,
     ShapBeeswarmResponse,
 )
-from chap_core.xai.covariate_fallback import resolve_covariate_row
-from chap_core.xai.forecast_matching import find_forecast_row_index
+
+from ..covariate_fallback import resolve_covariate_row
+from ..forecast_matching import find_forecast_row_index
 
 
 def has_native_shap(prediction: Any) -> bool:

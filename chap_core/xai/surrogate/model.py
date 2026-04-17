@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from chap_core.xai.surrogate_model_registry import (
+from .registry import (
     DEFAULT_MODEL_TYPE,
     SUPPORTED_MODELS,
     get_display_name,
@@ -31,10 +31,6 @@ __all__ = [
     "tune_surrogate_hyperparameters",
     "wrap_with_transform",
 ]
-
-
-def _is_model_available(model_type: str) -> bool:
-    return is_model_available(model_type)
 
 
 def build_surrogate_model(
@@ -309,7 +305,7 @@ def auto_select_best_model_type(
     ranked: list[tuple[float, str]] = []
 
     for model_type in SUPPORTED_MODELS:
-        if not _is_model_available(model_type):
+        if not is_model_available(model_type):
             logger.debug("Auto-select: skipping %s (package not available)", model_type)
             continue
         try:

@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from chap_core.xai.covariate_fallback import _target_signature, _year_month_from_any
+from chap_core.xai.covariate_fallback import target_signature, year_month_from_any
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ def find_forecast_row_index(forecasts: list[Any], org_unit: str, period: str) ->
     incorrectly mapped every horizon (e.g. ``202405_2``) to the first ``202405_*`` row.
 
     When ``period`` is a horizon-step id like ``202406_k``, and no forecast stores that
-    literal period, we derive the target calendar month/week from ``_target_signature``
+    literal period, we derive the target calendar month/week from ``target_signature``
     and look for a forecast whose stored period falls in that calendar period.
     """
     nreq = norm_period_id(period)
@@ -54,11 +54,11 @@ def find_forecast_row_index(forecasts: list[Any], org_unit: str, period: str) ->
             # Horizon-step notation (e.g. "202406_2") with forecasts stored as plain
             # calendar periods (e.g. "202407"). Derive the target calendar month and
             # match against forecast periods.
-            sig = _target_signature(period)
+            sig = target_signature(period)
             if sig is not None and sig[0] == "month":
                 _, target_year, target_month = sig
                 cal_matches = [
-                    i for i in unit_indices if _year_month_from_any(forecasts[i].period) == (target_year, target_month)
+                    i for i in unit_indices if year_month_from_any(forecasts[i].period) == (target_year, target_month)
                 ]
                 if len(cal_matches) == 1:
                     return cal_matches[0]

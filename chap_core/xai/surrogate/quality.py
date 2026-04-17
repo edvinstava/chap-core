@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 from sklearn.metrics import r2_score
 
-from .surrogate_model_registry import get_display_name
+from .registry import get_display_name
 
 
 @dataclass

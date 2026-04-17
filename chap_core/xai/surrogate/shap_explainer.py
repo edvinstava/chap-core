@@ -11,23 +11,23 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from .surrogate_model import (
-    DEFAULT_MODEL_TYPE,
-    build_shap_explainer,
-    build_surrogate_model,
-    resolve_model_params,
-)
-from .surrogate_preprocessing import FilterResult, filter_features
-from .surrogate_training import train_surrogate
-from .types import (
+from ..types import (
     ExplanationMethod,
     FeatureAttribution,
     GlobalExplanation,
     LocalExplanation,
 )
+from .model import (
+    DEFAULT_MODEL_TYPE,
+    build_shap_explainer,
+    build_surrogate_model,
+    resolve_model_params,
+)
+from .preprocessing import FilterResult, filter_features
+from .training import train_surrogate
 
 if TYPE_CHECKING:
-    from .surrogate_quality import SurrogateQuality
+    from .quality import SurrogateQuality
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class SurrogateSHAPExplainer:
     The surrogate model type is controlled by model_config:
       {"model_type": "random_forest", "n_estimators": 200}
 
-    Supported model types are defined in surrogate_model.SUPPORTED_MODELS.
+    Supported model types are defined in surrogate.registry.SUPPORTED_MODELS.
 
     SHAP guarantee (local, tree models): predicted_value = baseline + sum(shap_values)
     """

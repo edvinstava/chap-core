@@ -26,7 +26,12 @@ from chap_core.rest_api.v1.xai_schemas import (
 from chap_core.xai.batch_explanations import run_explanations_task
 from chap_core.xai.forecast_matching import find_forecast_row_index
 from chap_core.xai.method_registry import XAI_METHODS as XAI_METHOD_DEFINITIONS
-from chap_core.xai.native_shap_responses import has_native_shap, list_filtered_native_shap_locals
+from chap_core.xai.responses.native_shap import has_native_shap, list_filtered_native_shap_locals
+from chap_core.xai.responses.stored_views import (
+    beeswarm_from_stored,
+    explanation_to_response,
+    horizon_summary_from_stored,
+)
 from chap_core.xai.router_services import (
     compute_beeswarm_service,
     compute_global_explanation_service,
@@ -36,11 +41,6 @@ from chap_core.xai.router_services import (
     load_global_entry,
     resolve_canonical_period,
     validate_xai_method_name,
-)
-from chap_core.xai.stored_explanation_views import (
-    beeswarm_from_stored,
-    explanation_to_response,
-    horizon_summary_from_stored,
 )
 
 from .dependencies import get_database_url, get_session

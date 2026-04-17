@@ -4,8 +4,9 @@ from typing import Any
 import numpy as np
 
 from chap_core.log_config import get_status_logger
-from chap_core.xai.covariate_fallback import resolve_covariate_row
-from chap_core.xai.surrogate_cache import get_cached_surrogate, put_cached_surrogate
+
+from ..covariate_fallback import resolve_covariate_row
+from .cache import get_cached_surrogate, put_cached_surrogate
 
 logger = logging.getLogger(__name__)
 
@@ -82,16 +83,16 @@ def fit_surrogate_explainer(
     xai_method_name: str = "",
     cache_key: tuple | None = None,
 ) -> Any:
-    from chap_core.xai.lime_explainer import SurrogateLIMEExplainer
-    from chap_core.xai.shap_explainer import SurrogateSHAPExplainer
-
-    MIN_SAMPLES_FOR_TUNING = 15
-    from chap_core.xai.surrogate_model import (
+    from .lime_explainer import SurrogateLIMEExplainer
+    from .model import (
         auto_select_best_model_type,
         select_and_tune_best_model_type,
         tune_surrogate_hyperparameters,
     )
-    from chap_core.xai.surrogate_preprocessing import filter_features
+    from .preprocessing import filter_features
+    from .shap_explainer import SurrogateSHAPExplainer
+
+    MIN_SAMPLES_FOR_TUNING = 15
 
     if cache_key is not None:
         cached = get_cached_surrogate(cache_key)

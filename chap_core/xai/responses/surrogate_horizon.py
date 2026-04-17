@@ -8,7 +8,8 @@ from chap_core.rest_api.v1.xai_schemas import (
     HorizonStepSummary,
     HorizonSummaryResponse,
 )
-from chap_core.xai.response_quality import quality_response_dict
+
+from .quality import quality_response_dict
 
 
 def forecast_actual_value(values: list[float], output_statistic: str) -> float:

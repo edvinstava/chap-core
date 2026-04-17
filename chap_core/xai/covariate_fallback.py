@@ -15,7 +15,7 @@ _MONTH_HEAD_RE = re.compile(r"^(\d{4})[-/](\d{1,2})(?:[-/T\s]|$)")
 _DAY_HEAD_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 
 
-def _year_month_from_any(raw: Any) -> tuple[int, int] | None:
+def year_month_from_any(raw: Any) -> tuple[int, int] | None:
     """Extract (year, month) from any period-like value, or return None if not parseable.
 
     Handles pd.Period, pd.Timestamp, date objects, numpy scalars, integer YYYYMM values,
@@ -120,10 +120,10 @@ def period_df_for_forecast(loc_df: pd.DataFrame, period_col: str, forecast_perio
         str_match = s_series.astype(str).str.strip() == cstr
         if str_match.any():
             return loc_df.loc[str_match].iloc[:1]
-        ym_cand = _year_month_from_any(cand)
+        ym_cand = year_month_from_any(cand)
         if ym_cand is None:
             continue
-        idx = [i for i in range(len(loc_df)) if _year_month_from_any(s_series.iloc[i]) == ym_cand]
+        idx = [i for i in range(len(loc_df)) if year_month_from_any(s_series.iloc[i]) == ym_cand]
         if idx:
             return loc_df.iloc[[idx[0]]]
     return pd.DataFrame()
@@ -150,7 +150,7 @@ def _parse_row_period(raw: Any) -> Month | Week | None:
         return None
 
 
-def _target_signature(forecast_period: str) -> tuple[str, int, int] | None:
+def target_signature(forecast_period: str) -> tuple[str, int, int] | None:
     """Calendar period for covariates at this forecast id.
 
     For ``YYYYMM_k`` (monthly origin + horizon step k), the target calendar month is
@@ -166,7 +166,7 @@ def _target_signature(forecast_period: str) -> tuple[str, int, int] | None:
                 if isinstance(tp0, Month):
                     td = tp0.time_delta
                     target_tp = tp0 + td * int(step_s)
-                    ym = _year_month_from_any(str(target_tp.id))
+                    ym = year_month_from_any(str(target_tp.id))
                     if ym is not None:
                         return ("month", ym[0], ym[1])
                 if isinstance(tp0, Week):
@@ -182,7 +182,7 @@ def _target_signature(forecast_period: str) -> tuple[str, int, int] | None:
         tp = _parse_row_period(key)
         if isinstance(tp, Week):
             return ("week", tp.year, int(tp.week))
-        ym = _year_month_from_any(key)
+        ym = year_month_from_any(key)
         if ym is not None:
             return ("month", ym[0], ym[1])
     return None
@@ -196,7 +196,7 @@ def _historical_month_slice_fixed(
     years_prior: list[int] = []
     years_any: list[int] = []
     for i in range(len(loc_df)):
-        ym = _year_month_from_any(loc_df[period_col].iloc[i])
+        ym = year_month_from_any(loc_df[period_col].iloc[i])
         if ym is None or ym[1] != target_month:
             continue
         yrow = ym[0]
@@ -288,7 +288,7 @@ def resolve_covariate_row(
         row = _aggregate_features(period_df, feature_names)
         return row, _provenance_dataset_match(cand)
 
-    sig = _target_signature(forecast_period)
+    sig = target_signature(forecast_period)
     if sig is not None and period_col in loc_df.columns and not loc_df.empty:
         kind, y, m_or_w = sig
         if kind == "month":

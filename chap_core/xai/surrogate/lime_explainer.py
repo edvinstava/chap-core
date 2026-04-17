@@ -3,8 +3,8 @@ from typing import Any
 
 import numpy as np
 
+from ..types import ExplanationMethod, FeatureAttribution, GlobalExplanation, LocalExplanation
 from .shap_explainer import SurrogateSHAPExplainer
-from .types import ExplanationMethod, FeatureAttribution, GlobalExplanation, LocalExplanation
 
 logger = logging.getLogger(__name__)
 
