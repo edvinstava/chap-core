@@ -1,4 +1,4 @@
-.PHONY: clean coverage dist docs help install lint lint/flake8 test-chapkit-compose force-restart
+.PHONY: clean coverage dist docs help install lint lint/flake8 test-chapkit-compose force-restart restart chap-version
 .DEFAULT_GOAL := help
 
 define PRINT_HELP_PYSCRIPT
@@ -61,8 +61,6 @@ test-timed: ## run tests showing timing for 20 slowest tests
 test-all: ## run comprehensive test suite with examples and coverage
 	mkdir -p target runs
 	./tests/test_docker_compose_integration_flow.sh
-	CHAP_DEBUG=true uv run chap evaluate --model-name https://github.com/sandvelab/monthly_ar_model@89f070dbe6e480d1e594e99b3407f812f9620d6d --dataset-name ISIMIP_dengue_harmonized --dataset-country vietnam --n-splits 2 --prediction-length 3
-	CHAP_DEBUG=true uv run chap evaluate --model-name external_models/naive_python_model_with_mlproject_file_and_docker/ --dataset-name ISIMIP_dengue_harmonized --dataset-country vietnam --n-splits 2 --model-configuration-yaml external_models/naive_python_model_with_mlproject_file_and_docker/example_model_configuration.yaml
 
 	#./tests/test_docker_compose_flow.sh   # this runs pytests inside a docker container, can be skipped
 	CHAP_DEBUG=true uv run pytest --log-cli-level=INFO -o log_cli=true -v --durations=0 --cov=climate_health --cov-report html --run-slow
@@ -87,5 +85,11 @@ dist: clean ## build source and wheel package
 install: clean ## sync dependencies and install package in development mode
 	uv sync
 
-force-restart: ## tear down, rebuild, and start docker compose from scratch
-	docker compose down -v && docker compose build --no-cache && docker compose up --remove-orphans
+force-restart: ## tear down, rebuild, and start docker compose from scratch (WIPES VOLUMES including chap-db)
+	docker compose -f compose.yml -f compose.ewars.yml down -v && docker compose -f compose.yml -f compose.ewars.yml build --no-cache && docker compose -f compose.yml -f compose.ewars.yml up --remove-orphans
+
+restart: ## soft restart docker compose (preserves volumes; rebuilds only on source changes)
+	docker compose -f compose.yml -f compose.ewars.yml down && docker compose -f compose.yml -f compose.ewars.yml up -d --build --remove-orphans && $(MAKE) chap-version
+
+chap-version: ## print the chap_core version running inside the chap container
+	@docker compose -f compose.yml -f compose.ewars.yml exec -T chap python -c 'import chap_core; print(f"chap_core running in container: {chap_core.__version__}")' 2>/dev/null || echo "chap container not running"
