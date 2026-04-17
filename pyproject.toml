@@ -59,9 +59,13 @@ dependencies = [
     "alembic>=1.14.0",
     "chapkit>=0.17.1",
     "cryptography>=46.0.7",
+]
+
+[project.optional-dependencies]
+xai = [
     "xgboost>=3.2.0",
     "lightgbm>=4.6.0",
-    "catboost>=1.2.8",
+    "catboost>=1.2.10",
 ]
 
 [dependency-groups]

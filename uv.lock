@@ -369,7 +369,6 @@ dependencies = [
     { name = "alembic" },
     { name = "altair" },
     { name = "bionumpy" },
-    { name = "catboost" },
     { name = "celery", extra = ["pytest"] },
     { name = "chapkit" },
     { name = "cryptography" },
@@ -386,7 +385,6 @@ dependencies = [
     { name = "httpx" },
     { name = "jsonschema" },
     { name = "libpysal" },
-    { name = "lightgbm" },
     { name = "matplotlib" },
     { name = "mlflow-skinny" },
     { name = "netcdf4", version = "1.7.3", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'ARM64' and sys_platform == 'win32'" },
@@ -418,6 +416,12 @@ dependencies = [
     { name = "virtualenv" },
     { name = "vl-convert-python" },
     { name = "xarray" },
+]
+
+[package.optional-dependencies]
+xai = [
+    { name = "catboost" },
+    { name = "lightgbm" },
     { name = "xgboost" },
 ]
 
@@ -460,7 +464,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.14.0" },
     { name = "altair", specifier = ">=5.5.0" },
     { name = "bionumpy", specifier = ">=1.0.14" },
-    { name = "catboost", specifier = ">=1.2.8" },
+    { name = "catboost", marker = "extra == 'xai'", specifier = ">=1.2.10" },
     { name = "celery", extras = ["pytest"], specifier = ">=5.6.3" },
     { name = "chapkit", specifier = ">=0.17.1" },
     { name = "cryptography", specifier = ">=46.0.7" },
@@ -477,7 +481,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jsonschema", specifier = ">=4.25.1" },
     { name = "libpysal", specifier = ">=4.13.0" },
-    { name = "lightgbm", specifier = ">=4.6.0" },
+    { name = "lightgbm", marker = "extra == 'xai'", specifier = ">=4.6.0" },
     { name = "matplotlib", specifier = ">=3.10.6" },
     { name = "mlflow-skinny", specifier = ">=3.11.1" },
     { name = "netcdf4", specifier = ">=1.7.2" },
@@ -508,8 +512,9 @@ requires-dist = [
     { name = "virtualenv", specifier = ">=20.34.0" },
     { name = "vl-convert-python", specifier = ">=1.8.0" },
     { name = "xarray", specifier = ">=2025.10.0" },
-    { name = "xgboost", specifier = ">=3.2.0" },
+    { name = "xgboost", marker = "extra == 'xai'", specifier = ">=3.2.0" },
 ]
+provides-extras = ["xai"]
 
 [package.metadata.requires-dev]
 dev = [
