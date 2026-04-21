@@ -2,7 +2,7 @@
 
 If your model can compute SHAP values directly — for example because it is tree-based or linear — you can output them alongside predictions. CHAP will store these native SHAP values and surface them in the Explainability Widget as global feature importance, beeswarm plots, waterfall charts, and horizon summaries, without fitting a surrogate model.
 
-This is purely opt-in. Models that do not provide SHAP values continue to use surrogate-based explanations as before.
+This is purely opt-in. Models that do not provide SHAP values can use surrogate-based explanations instead.
 
 ## Step 1: Declare native SHAP support in MLproject
 
@@ -50,10 +50,9 @@ Column rules:
 - `location` and `time_period` must match the corresponding rows in `predictions.csv`.
 - `expected_value` is the SHAP baseline value `E[f(x)]` for that row (the model's average prediction, or the intercept for additive models). Each row can have its own value, or you can repeat a constant baseline.
 - SHAP columns must be prefixed as `shap__<feature_name>`.
-- Feature-value columns should be included as `value__<feature_name>` when possible. This is recommended for engineered features that are not present in CHAP's covariate dataset, so UI popups show the true feature values.
-- Legacy format without prefixes is still supported: `location,time_period,expected_value,<feature1>,<feature2>,...` (interpreted as SHAP values only).
+- Feature-value columns are required: include `value__<feature_name>` for every SHAP column. This allows UI popups to show the true feature values, especially for engineered features not present in CHAP's covariate dataset.
 - Row order does not need to match `predictions.csv`. CHAP joins on `(location, time_period)`.
-- If `shap_values.csv` is missing or cannot be parsed, CHAP falls back to surrogate SHAP and logs a warning.
+- If `shap_values.csv` is missing or cannot be parsed, CHAP logs a warning and native SHAP data is not stored for this prediction. Surrogate-based methods (e.g. `shap_auto`) remain available but must be requested explicitly.
 
 ## Python example
 
@@ -130,17 +129,19 @@ write.csv(shap_df, "shap_values.csv", row.names = FALSE)
 
 When CHAP detects native SHAP values for a prediction it:
 
-- Shows a **"SHAP - Native (from model)"** option in the XAI method selector of the Explainability Widget.
-- Auto-selects native SHAP as the default, since it is more accurate than the surrogate.
+- Exposes the `native_shap` method via the XAI API (visible in `/xai/methods` and the Explainability Widget method selector).
 - Replaces the surrogate quality panel (R-squared, MAE) with a **"Direct from model"** indicator, because no surrogate approximation is involved.
-- Renders the same four visualisations as surrogate SHAP: global feature importance bar chart, beeswarm plot, waterfall chart (local), and horizon summary.
+- Renders the same visualisations as surrogate SHAP: global feature importance, beeswarm plot, waterfall chart (local), and horizon summary.
 
-Users can still switch to the surrogate-based method via the method selector if they want to compare.
+Global and local explanations for `native_shap` are derived directly from the stored `shap_values.csv` data; no surrogate is trained. The actual prediction for a row is computed as `expected_value + sum(shap_values)` for that row.
+
+Users can still call surrogate-based methods (for example `shap_auto`) alongside native SHAP to compare results.
 
 ## Checklist
 
-- [ ] `provides_native_shap: true` in `MLproject`
-- [ ] `shap_values.csv` written to the working directory by the predict entry point
-- [ ] Columns: `location`, `time_period`, `expected_value`, `shap__<feature>` columns, and ideally `value__<feature>` columns
-- [ ] `location` and `time_period` values match those in `predictions.csv`
-- [ ] SHAP values are per-row, not aggregated (CHAP derives global summaries from them)
+- `provides_native_shap: true` in `MLproject`
+- `shap_values.csv` written to the working directory by the predict entry point
+- Columns: `location`, `time_period`, `expected_value`, `shap__<feature>` columns, and `value__<feature>` columns (required)
+- `location` and `time_period` values match those in `predictions.csv`
+- SHAP values are per-row, not aggregated (CHAP derives global summaries from them)
+
