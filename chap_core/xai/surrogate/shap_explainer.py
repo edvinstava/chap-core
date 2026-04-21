@@ -495,7 +495,9 @@ class SurrogateSHAPExplainer:
 
         X_f = self._filter_X(X)
         y_surrogate = self._model.predict(X_f)
-        result = permutation_importance(self._model, X_f, y_surrogate, n_repeats=10, random_state=self._random_state)
+        result = permutation_importance(
+            self._model, X_f, y_surrogate, n_repeats=10, random_state=self._random_state
+        )
         mean_abs_filtered = np.maximum(result.importances_mean, 0.0)
         mean_abs_full = np.zeros(len(self.feature_names))
         if self._keep_indices is not None:

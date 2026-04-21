@@ -102,7 +102,10 @@ def persist_global_entry(
     xai_method: str,
     global_exp: Any,
     quality: dict[str, Any],
+    *,
+    commit: bool = True,
 ) -> None:
+    session.refresh(prediction)
     meta_data = dict(prediction.meta_data) if prediction.meta_data else {}
     meta_data.setdefault("xai", {}).setdefault("global_by_method", {})[xai_method] = {
         "topFeatures": [f.model_dump() for f in global_exp.top_features],
@@ -114,7 +117,8 @@ def persist_global_entry(
     prediction.meta_data = meta_data
     flag_modified(prediction, "meta_data")
     session.add(prediction)
-    session.commit()
+    if commit:
+        session.commit()
 
 
 def build_surrogate_context(

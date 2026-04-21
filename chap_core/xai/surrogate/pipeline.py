@@ -101,7 +101,7 @@ def fit_surrogate_explainer(
             return cached
 
     status_logger = get_status_logger()
-    is_lime = xai_method_name in ("lime", "lime_auto")
+    is_lime = xai_method_name == "lime_auto"
 
     fr = filter_features(
         X,

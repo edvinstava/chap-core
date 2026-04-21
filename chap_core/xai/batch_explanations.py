@@ -59,7 +59,7 @@ def run_explanations_task(
 
     status_logger.info("Computing global explanation...")
     global_exp = explainer.explain_global(X, top_k=top_k)
-    persist_global_entry(session.session, prediction, xai_method_name, global_exp, quality)
+    persist_global_entry(session.session, prediction, xai_method_name, global_exp, quality, commit=False)
 
     status_logger.info("Computing %d local explanations (method=%s)...", len(forecasts), xai_method_name)
     for idx, fc in enumerate(forecasts):

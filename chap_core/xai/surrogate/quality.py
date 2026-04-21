@@ -21,13 +21,13 @@ class SurrogateQuality:
     selected_model_display_name: str | None = None
     n_groups: int | None = None
     fidelity_tier: str = "good"
-    fidelity_warning: str | None = None
     residual_mean: float | None = None
     residual_std: float | None = None
     target_transformed: bool = False
     target_transform_method: str | None = None
     permutation_removed_features: list[str] = field(default_factory=list)
     r_squared_train: float | None = None
+    generalization_gap: float | None = None
 
     def to_dict(self) -> dict:
         def _r(v: float | None, ndigits: int) -> float | None:
@@ -46,37 +46,22 @@ class SurrogateQuality:
             "selected_model_display_name": self.selected_model_display_name,
             "n_groups": self.n_groups,
             "fidelity_tier": self.fidelity_tier,
-            "fidelity_warning": self.fidelity_warning,
             "residual_mean": _r(self.residual_mean, 6),
             "residual_std": _r(self.residual_std, 6),
             "target_transformed": self.target_transformed,
             "target_transform_method": self.target_transform_method,
             "permutation_removed_features": self.permutation_removed_features,
             "r_squared_train": _r(self.r_squared_train, 6),
+            "generalization_gap": _r(self.generalization_gap, 6),
         }
 
 
-def _compute_fidelity_tier(r2: float | None) -> tuple[str, str | None]:
-    """Return (fidelity_tier, fidelity_warning) based on LOO-R².
-
-    Thresholds follow XAI best practice for surrogate fidelity:
-      R² < 0.5  → poor   (surrogate explains less than half the variance)
-      R² < 0.8  → moderate (reasonable but notable unexplained variance remains)
-      R² >= 0.8 → good
-    """
+def _compute_fidelity_tier(r2: float | None) -> str:
     if r2 is None or r2 < 0.5:
-        return (
-            "poor",
-            "Surrogate R\u00b2 is low (< 0.5); the surrogate does not closely mimic the original model "
-            "and SHAP attributions may not reflect true model behaviour.",
-        )
+        return "poor"
     if r2 < 0.8:
-        return (
-            "moderate",
-            "Surrogate R\u00b2 is moderate (0.5\u20130.8); attributions are indicative but should be "
-            "interpreted with caution.",
-        )
-    return "good", None
+        return "moderate"
+    return "good"
 
 
 def compute_surrogate_quality(
@@ -119,7 +104,7 @@ def compute_surrogate_quality(
     ss_tot_train = float(np.sum((y - np.mean(y)) ** 2))
     r2_train: float | None = float(r2_score(y, train_preds)) if ss_tot_train > 0 else None
 
-    fidelity_tier, fidelity_warning = _compute_fidelity_tier(r2_cv)
+    generalization_gap: float | None = r2_train - r2_cv if (r2_train is not None and r2_cv is not None) else None
 
     return SurrogateQuality(
         r_squared=r2_cv,
@@ -133,12 +118,12 @@ def compute_surrogate_quality(
         selected_model_type=model_type,
         selected_model_display_name=get_display_name(model_type),
         n_groups=n_groups,
-        fidelity_tier=fidelity_tier,
-        fidelity_warning=fidelity_warning,
+        fidelity_tier=_compute_fidelity_tier(r2_cv),
         residual_mean=residual_mean,
         residual_std=residual_std,
         target_transformed=target_transform_method is not None,
         target_transform_method=target_transform_method,
         permutation_removed_features=perm_removed_features,
         r_squared_train=r2_train,
+        generalization_gap=generalization_gap,
     )

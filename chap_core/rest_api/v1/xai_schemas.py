@@ -124,12 +124,12 @@ class SurrogateQualityRead(DBModel):
     selected_model_display_name: str | None = Field(None, alias="selectedModelDisplayName")
     n_groups: int | None = Field(None, alias="nGroups")
     fidelity_tier: str | None = Field(None, alias="fidelityTier")
-    fidelity_warning: str | None = Field(None, alias="fidelityWarning")
     residual_mean: float | None = Field(None, alias="residualMean")
     residual_std: float | None = Field(None, alias="residualStd")
     target_transformed: bool = Field(False, alias="targetTransformed")
     target_transform_method: str | None = Field(None, alias="targetTransformMethod")
     permutation_removed_features: list[str] = Field(default_factory=list, alias="permutationRemovedFeatures")
     r_squared_train: float | None = Field(None, alias="rSquaredTrain")
+    generalization_gap: float | None = Field(None, alias="generalizationGap")
 
     model_config = ConfigDict(populate_by_name=True)

@@ -108,19 +108,6 @@ XAI_METHODS = [
         "supported_visualizations": ["importance"],
     },
     {
-        "id": 9,
-        "name": "lime",
-        "display_name": "LIME \u2014 Local Explanations",
-        "description": (
-            "Applies LIME (Local Interpretable Model-agnostic Explanations) on a surrogate "
-            "to explain individual predictions as a weighted feature bar chart."
-        ),
-        "method_type": "surrogate_lime",
-        "author": "CHAP",
-        "archived": False,
-        "supported_visualizations": ["importance"],
-    },
-    {
         "id": 10,
         "name": "occlusion",
         "display_name": "Permutation Importance",
