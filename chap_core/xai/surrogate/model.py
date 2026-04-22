@@ -26,10 +26,12 @@ __all__ = [
     "build_surrogate_model",
     "get_display_name",
     "get_model_info",
+    "loo_r2",
     "make_loo_model_factory",
     "make_model_factory",
     "resolve_model_params",
     "select_and_tune_best_model_type",
+    "select_target_transform",
     "tune_surrogate_hyperparameters",
     "wrap_with_transform",
 ]
@@ -131,7 +133,7 @@ def build_shap_explainer(model, model_type: str, X_train: np.ndarray | None = No
     For linear models, *X_train* is required as background data.
     For XGBoost/LightGBM, TreeExplainer is used with model_output='raw'.
     """
-    import shap  # type: ignore[import-untyped]
+    import shap
 
     info = get_model_info(model_type)
     shap_type = info["shap_type"]
@@ -144,7 +146,7 @@ def build_shap_explainer(model, model_type: str, X_train: np.ndarray | None = No
     raise ValueError(f"Unsupported shap_type '{shap_type}' for model_type '{model_type}'")
 
 
-def _select_target_transform(
+def select_target_transform(
     X: np.ndarray,
     y: np.ndarray,
     model_type: str,
@@ -230,7 +232,7 @@ def wrap_with_transform(base_model: Any, transform_method: str | None) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def _loo_r2(
+def loo_r2(
     X: np.ndarray,
     y: np.ndarray,
     model_factory: Callable,
@@ -306,7 +308,7 @@ def auto_select_best_model_type(
             continue
         try:
             factory = make_loo_model_factory(model_type, random_state=random_state, n_samples=len(X))
-            r2, _ = _loo_r2(X, y, factory, groups=groups)
+            r2, _ = loo_r2(X, y, factory, groups=groups)
         except Exception as exc:
             logger.debug("Auto-select: %s failed with %s", model_type, exc)
             continue

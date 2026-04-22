@@ -103,6 +103,8 @@ explainability = [
     "xgboost>=3.2.0",
     "lightgbm>=4.6.0",
     "catboost>=1.2.10",
+    "shap>=0.51.0",
+    "lime>=0.2.0.1",
 ]
 
 [project.urls]
@@ -242,6 +244,14 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "npstructures.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "shap.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "lime.*"
 ignore_missing_imports = true
 
 [tool.pyright]

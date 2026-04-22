@@ -11,10 +11,10 @@ from typing import Any
 import numpy as np
 
 from .model import (
-    _loo_r2,
-    _select_target_transform,
     build_surrogate_model,
     get_model_info,
+    loo_r2,
+    select_target_transform,
     wrap_with_transform,
 )
 from .quality import SurrogateQuality, compute_surrogate_quality
@@ -60,7 +60,7 @@ def train_surrogate(
 
     target_transform_method: str | None = None
     if n_fit >= MIN_SAMPLES_FOR_TARGET_TRANSFORM:
-        target_transform_method = _select_target_transform(X_filtered, y, model_type, params, random_state, n_fit)
+        target_transform_method = select_target_transform(X_filtered, y, model_type, params, random_state, n_fit)
 
     final_model: Any = wrap_with_transform(
         build_surrogate_model(model_type, params, random_state=random_state, n_samples=n_fit),
@@ -74,7 +74,7 @@ def train_surrogate(
             target_transform_method,
         )
 
-    r2_cv, loo_preds = _loo_r2(X_filtered, y, loo_factory, groups=groups)
+    r2_cv, loo_preds = loo_r2(X_filtered, y, loo_factory, groups=groups)
 
     quality = compute_surrogate_quality(
         X_filtered=X_filtered,

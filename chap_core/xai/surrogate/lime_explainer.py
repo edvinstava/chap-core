@@ -64,7 +64,7 @@ class SurrogateLIMEExplainer(SurrogateSHAPExplainer):
         indices = rng.choice(n_rows, size=max_instances, replace=False) if n_rows > max_instances else np.arange(n_rows)
 
         try:
-            from lime.lime_tabular import LimeTabularExplainer  # type: ignore[import-untyped]
+            from lime.lime_tabular import LimeTabularExplainer
 
             importance_matrix = np.zeros((len(indices), len(self.feature_names)))
             lime_explainer = LimeTabularExplainer(
@@ -132,7 +132,7 @@ class SurrogateLIMEExplainer(SurrogateSHAPExplainer):
         )
 
         try:
-            from lime.lime_tabular import LimeTabularExplainer  # type: ignore[import-untyped]
+            from lime.lime_tabular import LimeTabularExplainer
 
             X_f = self._filter_X(X)
             kept_names = self._kept_feature_names if self._kept_feature_names is not None else self.feature_names
@@ -151,8 +151,7 @@ class SurrogateLIMEExplainer(SurrogateSHAPExplainer):
                     mode="regression",
                     discretize_continuous=False,
                 )
-            assert self._lime_explainer_cache is not None
-            exp = self._lime_explainer_cache.explain_instance(
+            exp = self._lime_explainer_cache.explain_instance(  # type: ignore[union-attr]
                 X_f[instance_idx],
                 self._model.predict,
                 num_features=len(kept_names),
