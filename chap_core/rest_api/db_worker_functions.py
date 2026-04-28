@@ -233,6 +233,7 @@ def run_prediction(
     n_periods: int | None,
     name: str,
     session: SessionWrapper,
+    configured_model_with_data_source_id: int | None = None,
 ):
     # NOTE: model_id arg from the user is actually the model's unique name identifier
     status_logger.info(f"Starting prediction for model '{model_id}' on dataset ID {dataset_id}")
@@ -253,7 +254,13 @@ def run_prediction(
         metadata = _build_native_shap_metadata(native_shap)
         status_logger.info("Native SHAP values detected; pre-computing global explanation")
 
-    db_id = session.add_predictions(predictions, dataset_id, model_id, name, metadata)
+    db_id = session.add_predictions(
+        predictions,
+        dataset_id,
+        model_id,
+        name, metadata,
+        configured_model_with_data_source_id=configured_model_with_data_source_id,
+    )
     assert db_id is not None
 
     if native_shap is not None:
@@ -320,6 +327,7 @@ def predict_pipeline_from_composite_dataset(
     prediction_params: PredictionParams,
     session: SessionWrapper,
     worker_config=WorkerConfig(),
+    configured_model_with_data_source_id: int | None = None,
 ) -> int:
     """
     This is the main pipeline function to run prediction from a dataset.
@@ -331,7 +339,14 @@ def predict_pipeline_from_composite_dataset(
         dataset_info=dataset_create_info, orig_dataset=ds, polygons=ds.polygons.model_dump_json()
     )
 
-    result: int = run_prediction(prediction_params.model_id, dataset_id, prediction_params.n_periods, name, session)
+    result: int = run_prediction(
+        prediction_params.model_id,
+        dataset_id,
+        prediction_params.n_periods,
+        name,
+        session,
+        configured_model_with_data_source_id=configured_model_with_data_source_id,
+    )
     return result
 
 

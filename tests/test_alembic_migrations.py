@@ -41,16 +41,16 @@ ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
 # SQLModel metadata then drop these columns so the migration can re-add them.
 _COLUMNS_ADDED_BY_MIGRATIONS = [
     ("modeltemplatedb", "archived"),
+    ("prediction", "configured_model_with_data_source_id"),
     ("modeltemplatedb", "provides_native_shap"),
 ]
 
-# Tables created by alembic migrations (not in the baseline schema).
-# When simulating a pre-alembic database we drop these after create_all so the
-# migration can re-create them.
+# Tables added by alembic migrations (not in the baseline schema).
+# These are dropped after create_all so the migration can re-create them.
 _TABLES_ADDED_BY_MIGRATIONS = [
+    "configuredmodelwithdatasource",
     "predictionexplanation",
 ]
-
 
 def _pg_container():
     """Create and start a PostgreSQL testcontainer."""
@@ -106,6 +106,8 @@ def _create_baseline_schema(engine):
     SQLModel.metadata.create_all(engine)
 
     with engine.connect() as conn:
+        # Drop columns before tables so FKs pointing at soon-to-be-dropped
+        # tables are removed first.
         for table, column in _COLUMNS_ADDED_BY_MIGRATIONS:
             conn.execute(sa.text(f"ALTER TABLE {table} DROP COLUMN IF EXISTS {column}"))
         for table in _TABLES_ADDED_BY_MIGRATIONS:
