@@ -79,7 +79,8 @@ class SurrogateSHAPExplainer:
         self._is_fitted = False
         self.quality: SurrogateQuality | None = None
         self._shap_batch_cache: np.ndarray | None = None
-        self._shap_batch_cached_X: np.ndarray | None = None
+        self._shap_batch_cached_X_id: int | None = None
+        self._shap_batch_cached_X_shape: tuple[int, ...] | None = None
         self._keep_indices: list[int] | None = None
         self._kept_feature_names: list[str] | None = None
         self._target_transform_method: str | None = None
@@ -154,7 +155,8 @@ class SurrogateSHAPExplainer:
 
         self._is_fitted = True
         self._shap_batch_cache = None
-        self._shap_batch_cached_X = None
+        self._shap_batch_cached_X_id = None
+        self._shap_batch_cached_X_shape = None
 
     @staticmethod
     def _try_build_shap_explainer(model: Any, model_type: str, X_train: np.ndarray | None = None) -> Any:
@@ -385,12 +387,12 @@ class SurrogateSHAPExplainer:
         if self._shap_explainer is not None:
             need_shap_recompute = (
                 self._shap_batch_cache is None
-                or self._shap_batch_cached_X is None
-                or self._shap_batch_cached_X.shape != X.shape
-                or not np.array_equal(self._shap_batch_cached_X, X)
+                or self._shap_batch_cached_X_id != id(X)
+                or self._shap_batch_cached_X_shape != X.shape
             )
             if need_shap_recompute:
-                self._shap_batch_cached_X = np.array(X, copy=True)
+                self._shap_batch_cached_X_id = id(X)
+                self._shap_batch_cached_X_shape = X.shape
                 self._shap_batch_cache = self.shap_values_matrix(X)
             shap_values = self._shap_batch_cache[instance_idx]
         else:

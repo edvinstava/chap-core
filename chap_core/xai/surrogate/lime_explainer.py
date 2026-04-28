@@ -21,7 +21,8 @@ class SurrogateLIMEExplainer(SurrogateSHAPExplainer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._lime_explainer_cache: Any | None = None
-        self._lime_cached_X: np.ndarray | None = None
+        self._lime_cached_X_id: int | None = None
+        self._lime_cached_X_shape: tuple[int, ...] | None = None
 
     def explain_local(
         self,
@@ -139,12 +140,12 @@ class SurrogateLIMEExplainer(SurrogateSHAPExplainer):
             effective_n_samples = n_samples if n_samples is not None else min(2000, max(500, 50 * X_f.shape[1]))
             need_lime_rebuild = (
                 self._lime_explainer_cache is None
-                or self._lime_cached_X is None
-                or self._lime_cached_X.shape != X.shape
-                or not np.array_equal(self._lime_cached_X, X)
+                or self._lime_cached_X_id != id(X)
+                or self._lime_cached_X_shape != X.shape
             )
             if need_lime_rebuild:
-                self._lime_cached_X = np.array(X, copy=True)
+                self._lime_cached_X_id = id(X)
+                self._lime_cached_X_shape = X.shape
                 self._lime_explainer_cache = LimeTabularExplainer(
                     training_data=X_f,
                     feature_names=kept_names,
