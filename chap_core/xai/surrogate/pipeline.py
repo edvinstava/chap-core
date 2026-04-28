@@ -122,7 +122,7 @@ def fit_surrogate_explainer(
     elif n_rows >= 100:
         n_trials = 200
     elif n_rows >= 30:
-        n_trials = 100
+        n_trials = 50
     else:
         n_trials = max(15, min(40, n_rows))
 

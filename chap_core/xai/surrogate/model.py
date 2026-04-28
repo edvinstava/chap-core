@@ -522,7 +522,7 @@ def _score_fixed_params(
     return float(np.mean(val_scores))
 
 
-_MULTI_SEED_SEEDS = (42, 123, 7)
+_MULTI_SEED_SEEDS = (42, 123)
 
 
 def _run_multi_seed_tuning(
