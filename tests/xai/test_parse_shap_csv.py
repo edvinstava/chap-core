@@ -1,0 +1,61 @@
+"""Tests for native SHAP CSV parsing in chap_core.models.external_model."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+from chap_core.models.external_model import _parse_shap_csv
+
+
+def _write_csv(tmp_path: Path, df: pd.DataFrame) -> Path:
+    p = tmp_path / "shap_values.csv"
+    df.to_csv(p, index=False)
+    return p
+
+
+def _valid_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "location": ["A", "A", "B"],
+            "time_period": ["2024-01", "2024-02", "2024-01"],
+            "expected_value": [10.0, 10.0, 10.0],
+            "shap__rainfall": [0.5, 0.6, -0.2],
+            "shap__temp": [-0.3, -0.2, 0.4],
+            "value__rainfall": [80.0, 91.0, 54.0],
+            "value__temp": [28.0, 29.0, 31.0],
+        }
+    )
+
+
+def test_parses_valid_csv(tmp_path: Path):
+    p = _write_csv(tmp_path, _valid_df())
+    out = _parse_shap_csv(p)
+    assert out["feature_names"] == ["rainfall", "temp"]
+    assert len(out["values"]) == 3
+    assert out["values"][0]["feature_values"] == {"rainfall": 80.0, "temp": 28.0}
+    assert out["values"][0]["shap_values"] == [0.5, -0.3]
+
+
+def test_rejects_nan_in_shap_columns(tmp_path: Path):
+    df = _valid_df()
+    df.loc[0, "shap__rainfall"] = float("nan")
+    p = _write_csv(tmp_path, df)
+    with pytest.raises(ValueError, match="NaN .* shap"):
+        _parse_shap_csv(p)
+
+
+def test_rejects_oversized_file(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("CHAP_NATIVE_SHAP_MAX_BYTES", "100")  # 100 bytes
+    p = _write_csv(tmp_path, _valid_df())
+    with pytest.raises(ValueError, match="exceeds"):
+        _parse_shap_csv(p)
+
+
+def test_rejects_too_many_features(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("CHAP_NATIVE_SHAP_MAX_FEATURES", "1")
+    p = _write_csv(tmp_path, _valid_df())
+    with pytest.raises(ValueError, match="too many"):
+        _parse_shap_csv(p)

@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 
 from chap_core.database.model_templates_and_config_tables import ModelConfiguration
@@ -20,26 +21,18 @@ logger = logging.getLogger(__name__)
 def _parse_shap_csv(shap_file: Path) -> dict:
     """Parse shap_values.csv into a structured dict.
 
-    Expected CSV columns:
-      location, time_period, expected_value, shap__<feature1>, shap__<feature2>, ...,
-      value__<feature1>, value__<feature2>, ...
-    Returns::
-
-        {
-            "feature_names": ["f1", "f2", ...],
-            "expected_value": float,          # mean expected_value across all rows
-            "values": [
-                {
-                    "location": ...,
-                    "time_period": ...,
-                    "shap_values": [...],
-                    "feature_values": {<feature>: <value>, ...},
-                    "expected_value": ...,
-                },
-                ...
-            ],
-        }
+    Validates size and column counts (configurable via CHAP_NATIVE_SHAP_MAX_BYTES
+    and CHAP_NATIVE_SHAP_MAX_FEATURES environment variables) before reading,
+    rejects NaNs in both shap__ and value__ columns, and uses vectorised numpy
+    access instead of iterrows.
     """
+    max_bytes = int(os.getenv("CHAP_NATIVE_SHAP_MAX_BYTES", str(50 * 1024 * 1024)))
+    max_features = int(os.getenv("CHAP_NATIVE_SHAP_MAX_FEATURES", "500"))
+
+    size = shap_file.stat().st_size
+    if size > max_bytes:
+        raise ValueError(f"shap_values.csv ({size} bytes) exceeds CHAP_NATIVE_SHAP_MAX_BYTES={max_bytes}")
+
     shap_df = pd.read_csv(shap_file)
     required = {"location", "time_period", "expected_value"}
     missing_required = sorted(required - set(shap_df.columns))
@@ -49,8 +42,13 @@ def _parse_shap_csv(shap_file: Path) -> dict:
     shap_prefixed = [c for c in shap_df.columns if c.startswith("shap__")]
     if not shap_prefixed:
         raise ValueError("shap_values.csv must contain at least one 'shap__<feature>' column")
+    if len(shap_prefixed) > max_features:
+        raise ValueError(
+            f"shap_values.csv has too many SHAP feature columns ({len(shap_prefixed)} > "
+            f"CHAP_NATIVE_SHAP_MAX_FEATURES={max_features})"
+        )
+
     feature_names = [c[len("shap__") :] for c in shap_prefixed]
-    shap_column_by_feature = {f: f"shap__{f}" for f in feature_names}
     missing_value_columns = [f"value__{f}" for f in feature_names if f"value__{f}" not in shap_df.columns]
     if missing_value_columns:
         raise ValueError(
@@ -58,31 +56,39 @@ def _parse_shap_csv(shap_file: Path) -> dict:
             f"Missing: {missing_value_columns}"
         )
 
-    value_column_by_feature = {f: f"value__{f}" for f in feature_names}
-    values = []
-    for _, row in shap_df.iterrows():
-        feature_values = {}
-        for f in feature_names:
-            value_col = value_column_by_feature.get(f)
-            if value_col is None:
-                continue
-            raw_value = row.get(value_col)
-            if pd.isna(raw_value):
-                raise ValueError(
-                    "shap_values.csv contains NaN feature value "
-                    f"for column '{value_col}' (location={row['location']}, time_period={row['time_period']})"
-                )
-            feature_values[f] = float(raw_value)
-        values.append(
-            {
-                "location": str(row["location"]),
-                "time_period": str(row["time_period"]),
-                "shap_values": [float(row[shap_column_by_feature[f]]) for f in feature_names],
-                "feature_values": feature_values,
-                "expected_value": float(row.get("expected_value", 0.0)),
-            }
+    shap_cols = [f"shap__{f}" for f in feature_names]
+    value_cols = [f"value__{f}" for f in feature_names]
+
+    shap_matrix = shap_df[shap_cols].to_numpy(dtype=float, copy=False)
+    value_matrix = shap_df[value_cols].to_numpy(dtype=float, copy=False)
+
+    if np.isnan(shap_matrix).any():
+        bad = np.argwhere(np.isnan(shap_matrix))[0]
+        raise ValueError(
+            f"shap_values.csv contains NaN value in shap column '{shap_cols[int(bad[1])]}' at row={int(bad[0])}"
         )
-    global_expected = float(shap_df["expected_value"].mean()) if "expected_value" in shap_df.columns else 0.0
+    if np.isnan(value_matrix).any():
+        bad = np.argwhere(np.isnan(value_matrix))[0]
+        raise ValueError(
+            f"shap_values.csv contains NaN feature value at row={int(bad[0])} column='{value_cols[int(bad[1])]}'"
+        )
+
+    locations = shap_df["location"].astype(str).to_numpy()
+    periods = shap_df["time_period"].astype(str).to_numpy()
+    expected_values = shap_df["expected_value"].astype(float).to_numpy()
+
+    values = [
+        {
+            "location": str(locations[i]),
+            "time_period": str(periods[i]),
+            "shap_values": shap_matrix[i].tolist(),
+            "feature_values": dict(zip(feature_names, value_matrix[i].tolist(), strict=True)),
+            "expected_value": float(expected_values[i]),
+        }
+        for i in range(len(shap_df))
+    ]
+
+    global_expected = float(expected_values.mean()) if len(expected_values) else 0.0
     return {
         "feature_names": feature_names,
         "expected_value": global_expected,
