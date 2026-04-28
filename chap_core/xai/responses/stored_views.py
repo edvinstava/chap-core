@@ -25,7 +25,6 @@ def explanation_to_response(exp: PredictionExplanation) -> LocalExplanationRespo
         org_unit=exp.org_unit,
         period=exp.period,
         method=exp.method,
-        xai_method_name=result.get("xai_method_name", exp.method),
         output_statistic=exp.output_statistic,
         feature_attributions=result.get("feature_attributions", []),
         baseline_prediction=result.get("baseline_prediction", 0),

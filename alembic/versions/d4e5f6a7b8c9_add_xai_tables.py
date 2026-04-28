@@ -75,10 +75,19 @@ def upgrade() -> None:
         "predictionexplanation",
         ["prediction_id"],
     )
+    op.create_index(
+        "ix_predictionexplanation_prediction_id_method_org_unit",
+        "predictionexplanation",
+        ["prediction_id", "method", "org_unit"],
+    )
 
 
 def downgrade() -> None:
     """Drop predictionexplanation table and provides_native_shap column."""
+    op.drop_index(
+        "ix_predictionexplanation_prediction_id_method_org_unit",
+        table_name="predictionexplanation",
+    )
     op.drop_index(
         "ix_predictionexplanation_prediction_id",
         table_name="predictionexplanation",

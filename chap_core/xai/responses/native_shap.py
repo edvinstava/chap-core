@@ -80,7 +80,6 @@ def native_shap_local_response(
         org_unit=org_unit,
         period=period,
         method=NATIVE_SHAP,
-        xai_method_name=NATIVE_SHAP,
         output_statistic=output_statistic,
         feature_attributions=feature_attributions,
         baseline_prediction=expected_value,
@@ -176,7 +175,6 @@ def list_filtered_native_shap_locals(
                 org_unit=entry_org_unit,
                 period=entry_period,
                 method=NATIVE_SHAP,
-                xai_method_name=NATIVE_SHAP,
                 output_statistic=output_statistic,
                 feature_attributions=[
                     {

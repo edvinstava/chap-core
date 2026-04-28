@@ -161,7 +161,7 @@ async def compute_global_explanation(
         raise
     except Exception as e:
         logger.exception("Error computing global explanation: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error computing explanation: {e!s}") from e
+        raise HTTPException(status_code=500, detail="Error computing explanation") from e
 
 
 @router.get(
@@ -262,7 +262,7 @@ async def compute_local_explanation(
         raise
     except Exception as e:
         logger.exception("Error computing local explanation: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error computing explanation: {e!s}") from e
+        raise HTTPException(status_code=500, detail="Error computing local explanation") from e
 
 
 @router.post(
@@ -298,7 +298,7 @@ async def compute_shap_beeswarm(
         raise
     except Exception as e:
         logger.exception("Error computing SHAP beeswarm: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error computing beeswarm: {e!s}") from e
+        raise HTTPException(status_code=500, detail="Error computing beeswarm") from e
 
 
 @router.post(
@@ -341,7 +341,7 @@ async def compute_horizon_summary(
         raise
     except Exception as e:
         logger.exception("Error computing horizon summary: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error computing horizon summary: {e!s}") from e
+        raise HTTPException(status_code=500, detail="Error computing horizon summary") from e
 
 
 @router.get(

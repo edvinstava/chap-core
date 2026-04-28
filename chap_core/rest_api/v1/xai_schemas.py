@@ -32,7 +32,6 @@ class LocalExplanationResponse(DBModel):
     org_unit: str
     period: str
     method: str
-    xai_method_name: str | None = None
     output_statistic: str
     feature_attributions: list[dict]
     baseline_prediction: float
