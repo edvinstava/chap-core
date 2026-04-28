@@ -191,25 +191,34 @@ class SurrogateSHAPExplainer:
             baseline_t = float(ev[0]) if hasattr(ev, "__len__") else float(ev)
 
             shap_sum_t = np.sum(sv_full, axis=1)
-            t_pred = baseline_t + shap_sum_t
 
             if self._target_transform_method == "log1p":
-                inv = np.expm1
-                y_base = float(inv(baseline_t))
-                y_pred = inv(t_pred)
+                y_base = float(np.expm1(baseline_t))
             else:
                 transformer = getattr(self._model, "transformer_", None)
                 if transformer is None:
                     transformer = getattr(self._model, "transformer", None)
                 if transformer is None:
-                    return sv_full
+                    raise RuntimeError(
+                        "Yeo-Johnson target transform was selected but no fitted "
+                        "transformer is available on the surrogate model; refusing "
+                        "to return SHAP values in transformed space."
+                    )
                 y_base = float(transformer.inverse_transform(np.array([[baseline_t]], dtype=float)).reshape(-1)[0])
-                y_pred = transformer.inverse_transform(t_pred.reshape(-1, 1)).reshape(-1)
+            y_pred = np.asarray(self.predict(X), dtype=float)
 
-            scale = np.zeros_like(shap_sum_t, dtype=float)
+            n_features = sv_full.shape[1]
+            residual = y_pred - y_base  # what the rescaled shap row must sum to
+            scale = np.ones_like(shap_sum_t, dtype=float)
             nonzero = shap_sum_t != 0
-            scale[nonzero] = (y_pred[nonzero] - y_base) / shap_sum_t[nonzero]
+            scale[nonzero] = residual[nonzero] / shap_sum_t[nonzero]
             sv_full = sv_full * scale[:, None]
+
+            # When shap_sum_t == 0 the row is now all zeros; spread the residual
+            # uniformly so baseline + sum(sv_row) == y_pred holds for every row.
+            zero_rows = ~nonzero
+            if np.any(zero_rows) and n_features > 0:
+                sv_full[zero_rows] = residual[zero_rows, None] / n_features
 
         return sv_full
 
