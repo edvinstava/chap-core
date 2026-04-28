@@ -22,6 +22,7 @@ openapi_tags = [
     {"name": "Jobs", "description": "Monitor and manage async jobs"},
     {"name": "Debug", "description": "Debug and diagnostic endpoints"},
     {"name": "Services", "description": "Service registry (v2)"},
+    {"name": "XAI", "description": "Explainability endpoints"},
 ]
 
 app = FastAPI(

@@ -58,7 +58,7 @@ Column rules:
 
 This example uses a scikit-learn `GradientBoostingRegressor` with `shap`:
 
-```python
+```console
 import pandas as pd
 import shap
 
@@ -82,7 +82,7 @@ shap_df.to_csv("shap_values.csv", index=False)
 
 For a linear model the pattern is the same but use `shap.LinearExplainer`:
 
-```python
+```console
 import shap
 
 explainer = shap.LinearExplainer(model, X_train)
