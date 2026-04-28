@@ -59,3 +59,19 @@ def test_rejects_too_many_features(tmp_path: Path, monkeypatch):
     p = _write_csv(tmp_path, _valid_df())
     with pytest.raises(ValueError, match="too many"):
         _parse_shap_csv(p)
+
+
+def test_rejects_malformed_env_var(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("CHAP_NATIVE_SHAP_MAX_BYTES", "abc")
+    p = _write_csv(tmp_path, _valid_df())
+    with pytest.raises(ValueError, match="CHAP_NATIVE_SHAP_MAX_BYTES"):
+        _parse_shap_csv(p)
+
+
+def test_rejects_non_numeric_shap_column(tmp_path: Path):
+    df = _valid_df()
+    df["shap__rainfall"] = df["shap__rainfall"].astype(object)
+    df.loc[0, "shap__rainfall"] = "not-a-number"
+    p = _write_csv(tmp_path, df)
+    with pytest.raises(ValueError, match="shap__rainfall"):
+        _parse_shap_csv(p)

@@ -18,6 +18,31 @@ from chap_core.time_period.date_util_wrapper import Month, TimePeriod
 logger = logging.getLogger(__name__)
 
 
+def _positive_int_env(name: str, default: int) -> int:
+    """Parse a positive integer environment variable, raising a clear error on failure."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"{name}={raw!r} must be a positive integer") from exc
+    if value <= 0:
+        raise ValueError(f"{name}={raw!r} must be a positive integer")
+    return value
+
+
+def _numeric_columns(df: pd.DataFrame, cols: list[str], kind: str) -> np.ndarray:
+    """Coerce the given dataframe columns to a float numpy matrix, attributing errors per-column."""
+    out = []
+    for c in cols:
+        try:
+            out.append(pd.to_numeric(df[c], errors="raise"))
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"shap_values.csv column '{c}' ({kind}) contains non-numeric data: {exc}") from exc
+    return np.column_stack([s.to_numpy(dtype=float, copy=False) for s in out])
+
+
 def _parse_shap_csv(shap_file: Path) -> dict:
     """Parse shap_values.csv into a structured dict.
 
@@ -26,8 +51,8 @@ def _parse_shap_csv(shap_file: Path) -> dict:
     rejects NaNs in both shap__ and value__ columns, and uses vectorised numpy
     access instead of iterrows.
     """
-    max_bytes = int(os.getenv("CHAP_NATIVE_SHAP_MAX_BYTES", str(50 * 1024 * 1024)))
-    max_features = int(os.getenv("CHAP_NATIVE_SHAP_MAX_FEATURES", "500"))
+    max_bytes = _positive_int_env("CHAP_NATIVE_SHAP_MAX_BYTES", 50 * 1024 * 1024)
+    max_features = _positive_int_env("CHAP_NATIVE_SHAP_MAX_FEATURES", 500)
 
     size = shap_file.stat().st_size
     if size > max_bytes:
@@ -59,8 +84,8 @@ def _parse_shap_csv(shap_file: Path) -> dict:
     shap_cols = [f"shap__{f}" for f in feature_names]
     value_cols = [f"value__{f}" for f in feature_names]
 
-    shap_matrix = shap_df[shap_cols].to_numpy(dtype=float, copy=False)
-    value_matrix = shap_df[value_cols].to_numpy(dtype=float, copy=False)
+    shap_matrix = _numeric_columns(shap_df, shap_cols, "shap")
+    value_matrix = _numeric_columns(shap_df, value_cols, "value")
 
     if np.isnan(shap_matrix).any():
         bad = np.argwhere(np.isnan(shap_matrix))[0]
