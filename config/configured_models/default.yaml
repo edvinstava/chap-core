@@ -102,11 +102,13 @@
       user_option_values:
         skip_bottom_n_seasons: 2
 
+# Model supporting native XAI shap values. REMOVED BEFORE MERGE.
 - url: https://github.com/edvinstava/chap-xai-lag-forecast
   versions:
     nightly_build: "@master"
     stable: "@96098064639955fa4e46209e6169c5a1496959a0"
 
+# Model supporting native XAI shap values. REMOVED BEFORE MERGE.
 - url: https://github.com/edvinstava/chap-xai-mljar
   versions:
     nightly_build: "@master"
