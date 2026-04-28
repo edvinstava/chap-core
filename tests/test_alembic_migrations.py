@@ -31,6 +31,7 @@ from chap_core.database.tables import (  # noqa: F401
     Prediction,
     PredictionSamplesEntry,
 )
+from chap_core.database.xai_tables import PredictionExplanation  # noqa: F401
 
 PROJECT_ROOT = Path(__file__).parent.parent
 ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
@@ -40,6 +41,14 @@ ALEMBIC_INI = PROJECT_ROOT / "alembic.ini"
 # SQLModel metadata then drop these columns so the migration can re-add them.
 _COLUMNS_ADDED_BY_MIGRATIONS = [
     ("modeltemplatedb", "archived"),
+    ("modeltemplatedb", "provides_native_shap"),
+]
+
+# Tables created by alembic migrations (not in the baseline schema).
+# When simulating a pre-alembic database we drop these after create_all so the
+# migration can re-create them.
+_TABLES_ADDED_BY_MIGRATIONS = [
+    "predictionexplanation",
 ]
 
 
@@ -99,6 +108,8 @@ def _create_baseline_schema(engine):
     with engine.connect() as conn:
         for table, column in _COLUMNS_ADDED_BY_MIGRATIONS:
             conn.execute(sa.text(f"ALTER TABLE {table} DROP COLUMN IF EXISTS {column}"))
+        for table in _TABLES_ADDED_BY_MIGRATIONS:
+            conn.execute(sa.text(f"DROP TABLE IF EXISTS {table}"))
         conn.commit()
 
 
