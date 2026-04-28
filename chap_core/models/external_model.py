@@ -239,6 +239,7 @@ class ExternalModel(ExternalModelBase):
         configuration: ModelConfiguration | None = None,
         model_information: ModelTemplateConfigV2 | None = None,
         dry_run=False,
+        provides_native_shap: bool = False,
     ):
         self._runner = runner  # MlFlowTrainPredictRunner(model_path)
         # self.model_path = model_path
@@ -259,6 +260,7 @@ class ExternalModel(ExternalModelBase):
         # self._config_filename = "model_config.yaml"
         self._model_information = model_information
         self._dry_run = dry_run
+        self._provides_native_shap = provides_native_shap
 
     @property
     def name(self):
@@ -408,15 +410,9 @@ class ExternalModel(ExternalModelBase):
             logging.error(f"Error message: {e}")
             raise ModelFailedException(f"Error while parsing predictions: {e}") from e
 
-        force_native_shap = os.getenv("CHAP_FORCE_NATIVE_SHAP", "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
-        provides_native_shap = (
+        provides_native_shap = self._provides_native_shap or (
             self._model_information is not None and self._model_information.provides_native_shap
-        ) or force_native_shap
+        )
         if provides_native_shap:
             shap_file = Path(self._working_dir) / "shap_values.csv"
             if shap_file.exists():
