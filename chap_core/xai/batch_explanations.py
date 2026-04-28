@@ -2,6 +2,7 @@ from chap_core.database.database import SessionWrapper
 from chap_core.database.tables import Prediction
 from chap_core.database.xai_tables import PredictionExplanation
 from chap_core.log_config import get_status_logger
+from chap_core.xai.method_registry import NATIVE_SHAP
 from chap_core.xai.responses.native_shap import has_native_shap
 from chap_core.xai.responses.quality import quality_response_dict
 from chap_core.xai.router_services import forecast_actual_value, persist_global_entry, resolve_feature_names
@@ -31,7 +32,7 @@ def run_explanations_task(
     if not forecasts:
         raise ValueError(f"No forecasts found for prediction {prediction_id}")
 
-    if xai_method_name == "native_shap":
+    if xai_method_name == NATIVE_SHAP:
         if not has_native_shap(prediction):
             raise ValueError(f"Prediction {prediction_id} has no native SHAP data")
         status_logger.info("Native SHAP: explanations already stored, skipping surrogate fitting")

@@ -17,7 +17,7 @@ from chap_core.rest_api.v1.xai_schemas import (
     ShapBeeswarmResponse,
 )
 from chap_core.xai.forecast_matching import find_forecast_row_index
-from chap_core.xai.method_registry import XAI_METHODS
+from chap_core.xai.method_registry import NATIVE_SHAP, XAI_METHODS
 from chap_core.xai.responses.native_shap import (
     native_shap_beeswarm,
     native_shap_global_response,
@@ -224,7 +224,7 @@ def compute_global_explanation_service(
     dataset = SessionWrapper(session=session).get_dataset(prediction.dataset_id)
     feature_names = resolve_feature_names(dataset)
 
-    if xai_method == "native_shap":
+    if xai_method == NATIVE_SHAP:
         resp = native_shap_global_response(prediction_id, prediction, xai_method)
         if resp is None:
             raise HTTPException(status_code=404, detail="No native SHAP data for this prediction")
@@ -260,7 +260,7 @@ def compute_local_explanation_service(
     dataset = SessionWrapper(session=session).get_dataset(prediction.dataset_id)
     feature_names = resolve_feature_names(dataset)
 
-    if request.xai_method == "native_shap":
+    if request.xai_method == NATIVE_SHAP:
         resp = native_shap_local_response(
             prediction_id, request.org_unit, canonical_period, request.output_statistic, prediction
         )
@@ -321,7 +321,7 @@ def compute_beeswarm_service(
     dataset = SessionWrapper(session=session).get_dataset(prediction.dataset_id)
     feature_names = resolve_feature_names(dataset)
 
-    if xai_method == "native_shap":
+    if xai_method == NATIVE_SHAP:
         resp = native_shap_beeswarm(prediction_id, output_statistic, prediction, dataset)
         if resp is None:
             raise HTTPException(status_code=404, detail="No native SHAP data for this prediction")
@@ -345,7 +345,7 @@ def compute_horizon_summary_service(
 
     forecasts = prediction.forecasts
 
-    if xai_method == "native_shap":
+    if xai_method == NATIVE_SHAP:
         built = build_native_shap_horizon_summary(
             prediction_id, org_unit, output_statistic, meta_data=prediction.meta_data, forecasts=forecasts
         )

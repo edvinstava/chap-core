@@ -11,8 +11,6 @@ def test_cache_max_respects_env(monkeypatch):
 
     importlib.reload(cache_mod)
     try:
-        assert cache_mod.SURROGATE_CACHE_MAX == 3
-
         for i in range(5):
             cache_mod.put_cached_surrogate((i,), object())
         # Only the last 3 keys remain (FIFO eviction).
@@ -21,5 +19,4 @@ def test_cache_max_respects_env(monkeypatch):
         assert cache_mod.get_cached_surrogate((2,)) is not None
         assert cache_mod.get_cached_surrogate((4,)) is not None
     finally:
-        monkeypatch.delenv("CHAP_SURROGATE_CACHE_MAX", raising=False)
         importlib.reload(cache_mod)

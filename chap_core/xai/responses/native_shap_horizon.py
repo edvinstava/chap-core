@@ -5,6 +5,7 @@ import numpy as np
 
 from ..covariate_fallback import target_signature, year_month_from_any
 from ..forecast_matching import find_forecast_row_index, norm_period_id
+from ..method_registry import NATIVE_SHAP
 
 
 def _find_native_value_row(
@@ -43,7 +44,7 @@ def build_native_shap_horizon_summary(
     meta_data: dict[str, Any] | None,
     forecasts: list[Any],
 ) -> dict[str, Any] | None:
-    native_shap = (meta_data or {}).get("native_shap")
+    native_shap = (meta_data or {}).get(NATIVE_SHAP)
     if not native_shap:
         return None
 
@@ -112,7 +113,7 @@ def build_native_shap_horizon_summary(
     return {
         "prediction_id": prediction_id,
         "org_unit": org_unit,
-        "method": "native_shap",
+        "method": NATIVE_SHAP,
         "output_statistic": output_statistic,
         "steps": steps,
         "average_importance": avg_importance,

@@ -25,6 +25,7 @@ from chap_core.rest_api.v1.xai_schemas import (
 )
 from chap_core.xai.batch_explanations import run_explanations_task
 from chap_core.xai.forecast_matching import find_forecast_row_index
+from chap_core.xai.method_registry import NATIVE_SHAP, SHAP_AUTO
 from chap_core.xai.method_registry import XAI_METHODS as XAI_METHOD_DEFINITIONS
 from chap_core.xai.responses.native_shap import has_native_shap, list_filtered_native_shap_locals
 from chap_core.xai.responses.stored_views import (
@@ -65,7 +66,7 @@ async def list_xai_methods(
         prediction = session.get(Prediction, prediction_id)
         has_native = prediction is not None and has_native_shap(prediction)
         if not has_native:
-            methods = [m for m in methods if m.name != "native_shap"]
+            methods = [m for m in methods if m.name != NATIVE_SHAP]
 
     return methods
 
@@ -137,7 +138,7 @@ async def get_global_explanation(
 async def compute_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     top_k: int = Query(10, alias="topK"),
-    xai_method: str = Query("shap_auto", alias="xaiMethod"),
+    xai_method: str = Query(SHAP_AUTO, alias="xaiMethod"),
     output_statistic: str = Query("median", alias="outputStatistic"),
     force: bool = Query(False),
     session: Session = Depends(get_session),
@@ -187,7 +188,7 @@ async def list_local_explanations(
         query = query.where(PredictionExplanation.org_unit == org_unit)
     if period:
         canonical_period = period
-        if xai_method != "native_shap" and "_" in period and org_unit and prediction.forecasts:
+        if xai_method != NATIVE_SHAP and "_" in period and org_unit and prediction.forecasts:
             idx = find_forecast_row_index(prediction.forecasts, org_unit, period)
             if idx is not None:
                 canonical_period = prediction.forecasts[idx].period
@@ -197,7 +198,7 @@ async def list_local_explanations(
 
     explanations = session.exec(query).all()
 
-    if not explanations and xai_method == "native_shap":
+    if not explanations and xai_method == NATIVE_SHAP:
         native_items = list_filtered_native_shap_locals(
             prediction_id, prediction, org_unit, period, output_statistic="median"
         )
@@ -273,7 +274,7 @@ async def compute_local_explanation(
 async def compute_shap_beeswarm(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     output_statistic: str = Query("median", alias="outputStatistic"),
-    xai_method: str = Query("shap_auto", alias="xaiMethod"),
+    xai_method: str = Query(SHAP_AUTO, alias="xaiMethod"),
     session: Session = Depends(get_session),
 ):
     validate_xai_method_name(xai_method)
@@ -310,7 +311,7 @@ async def compute_horizon_summary(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     org_unit: str = Query(..., alias="orgUnit"),
     output_statistic: str = Query("median", alias="outputStatistic"),
-    xai_method: str = Query("shap_auto", alias="xaiMethod"),
+    xai_method: str = Query(SHAP_AUTO, alias="xaiMethod"),
     session: Session = Depends(get_session),
 ):
     validate_xai_method_name(xai_method)

@@ -6,6 +6,7 @@ import numpy as np
 from chap_core.log_config import get_status_logger
 
 from ..covariate_fallback import resolve_covariate_row
+from ..method_registry import LIME_AUTO
 from .cache import get_cached_surrogate, put_cached_surrogate
 
 logger = logging.getLogger(__name__)
@@ -101,7 +102,7 @@ def fit_surrogate_explainer(
             return cached
 
     status_logger = get_status_logger()
-    is_lime = xai_method_name == "lime_auto"
+    is_lime = xai_method_name == LIME_AUTO
 
     fr = filter_features(
         X,

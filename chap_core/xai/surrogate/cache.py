@@ -4,7 +4,6 @@ from typing import Any
 
 _surrogate_cache: dict[tuple, Any] = {}
 _surrogate_cache_lock = threading.Lock()
-SURROGATE_CACHE_MAX = int(os.getenv("CHAP_SURROGATE_CACHE_MAX", "20"))
 
 
 def get_cached_surrogate(key: tuple) -> Any | None:
@@ -13,8 +12,9 @@ def get_cached_surrogate(key: tuple) -> Any | None:
 
 
 def put_cached_surrogate(key: tuple, explainer: Any) -> None:
+    max_size = int(os.getenv("CHAP_SURROGATE_CACHE_MAX", "20"))
     with _surrogate_cache_lock:
-        while len(_surrogate_cache) >= SURROGATE_CACHE_MAX:
+        while len(_surrogate_cache) >= max_size:
             oldest = next(iter(_surrogate_cache))
             del _surrogate_cache[oldest]
         _surrogate_cache[key] = explainer

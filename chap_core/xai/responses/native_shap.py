@@ -13,10 +13,11 @@ from chap_core.xai.types import ForecastLookupRow
 
 from ..covariate_fallback import resolve_covariate_row
 from ..forecast_matching import find_forecast_row_index
+from ..method_registry import NATIVE_SHAP
 
 
 def has_native_shap(prediction: Any) -> bool:
-    return bool((prediction.meta_data or {}).get("native_shap"))
+    return bool((prediction.meta_data or {}).get(NATIVE_SHAP))
 
 
 def native_shap_global_response(
@@ -43,7 +44,7 @@ def native_shap_local_response(
     output_statistic: str,
     prediction: Any,
 ) -> LocalExplanationResponse | None:
-    native_shap = (prediction.meta_data or {}).get("native_shap")
+    native_shap = (prediction.meta_data or {}).get(NATIVE_SHAP)
     if not native_shap:
         return None
 
@@ -78,8 +79,8 @@ def native_shap_local_response(
         prediction_id=prediction_id,
         org_unit=org_unit,
         period=period,
-        method="native_shap",
-        xai_method_name="native_shap",
+        method=NATIVE_SHAP,
+        xai_method_name=NATIVE_SHAP,
         output_statistic=output_statistic,
         feature_attributions=feature_attributions,
         baseline_prediction=expected_value,
@@ -95,7 +96,7 @@ def native_shap_beeswarm(
     prediction: Any,
     dataset: Any,
 ) -> ShapBeeswarmResponse | None:
-    native_shap = (prediction.meta_data or {}).get("native_shap")
+    native_shap = (prediction.meta_data or {}).get(NATIVE_SHAP)
     if not native_shap:
         return None
     feature_names = native_shap.get("feature_names", [])
@@ -148,7 +149,7 @@ def list_filtered_native_shap_locals(
     period: str | None,
     output_statistic: str = "median",
 ) -> list[LocalExplanationResponse]:
-    native_shap = (prediction.meta_data or {}).get("native_shap")
+    native_shap = (prediction.meta_data or {}).get(NATIVE_SHAP)
     if not native_shap:
         return []
 
@@ -174,8 +175,8 @@ def list_filtered_native_shap_locals(
                 prediction_id=prediction_id,
                 org_unit=entry_org_unit,
                 period=entry_period,
-                method="native_shap",
-                xai_method_name="native_shap",
+                method=NATIVE_SHAP,
+                xai_method_name=NATIVE_SHAP,
                 output_statistic=output_statistic,
                 feature_attributions=[
                     {

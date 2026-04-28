@@ -1,3 +1,7 @@
+NATIVE_SHAP = "native_shap"
+SHAP_AUTO = "shap_auto"
+LIME_AUTO = "lime_auto"
+
 XAI_METHODS = [
     {
         "id": 1,

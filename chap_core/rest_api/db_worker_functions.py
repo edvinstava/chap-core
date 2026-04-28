@@ -25,6 +25,7 @@ from chap_core.rest_api.data_models import BackTestCreate, FetchRequest, Predict
 from chap_core.rest_api.worker_functions import WorkerConfig, harmonize_health_dataset
 from chap_core.spatio_temporal_data.temporal_dataclass import DataSet
 from chap_core.time_period import Month
+from chap_core.xai.method_registry import NATIVE_SHAP
 
 logger = logging.getLogger(__name__)
 status_logger = get_status_logger()
@@ -171,10 +172,10 @@ def _build_native_shap_metadata(native_shap: dict) -> dict:
     )
 
     return {
-        "native_shap": native_shap,
+        NATIVE_SHAP: native_shap,
         "xai": {
             "global_by_method": {
-                "native_shap": {
+                NATIVE_SHAP: {
                     "topFeatures": top_features,
                     "computedAt": datetime.datetime.now(datetime.UTC).isoformat(),
                     "nSamples": n_samples,
@@ -210,14 +211,14 @@ def _store_native_shap_explanations(native_shap: dict, prediction_id: int, sessi
             prediction_id=prediction_id,
             org_unit=entry["location"],
             period=entry["time_period"],
-            method="native_shap",
+            method=NATIVE_SHAP,
             output_statistic="median",
             params={},
             result={
                 "feature_attributions": feature_attributions,
                 "baseline_prediction": expected_value,
                 "actual_prediction": actual_prediction,
-                "xai_method_name": "native_shap",
+                "xai_method_name": NATIVE_SHAP,
                 "surrogate_quality": None,
                 "covariate_provenance": None,
             },
@@ -249,7 +250,7 @@ def run_prediction(
     predictions = forecast_ahead(estimator, dataset, n_periods)
 
     metadata: dict = {}
-    native_shap = getattr(predictions, "native_shap", None)
+    native_shap = predictions.native_shap
     if native_shap is not None:
         metadata = _build_native_shap_metadata(native_shap)
         status_logger.info("Native SHAP values detected; pre-computing global explanation")
