@@ -258,7 +258,8 @@ def run_prediction(
         predictions,
         dataset_id,
         model_id,
-        name, metadata,
+        name,
+        metadata,
         configured_model_with_data_source_id=configured_model_with_data_source_id,
     )
     assert db_id is not None

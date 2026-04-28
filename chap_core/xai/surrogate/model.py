@@ -302,7 +302,9 @@ def auto_select_best_model_type(
     """
     ranked: list[tuple[float, str]] = []
 
-    for model_type in SUPPORTED_MODELS:
+    for model_type, model_info in SUPPORTED_MODELS.items():
+        if not model_info.get("auto_eligible", True):
+            continue
         if not is_model_available(model_type):
             logger.debug("Auto-select: skipping %s (package not available)", model_type)
             continue
@@ -433,9 +435,10 @@ def _run_tuning_study(
         if model_type == "xgboost":
             trial_params.pop("early_stopping_rounds", None)
         params = resolve_model_params(model_type, {}, trial_params)
-        model_template = lambda: build_surrogate_model(
-            model_type, params, random_state=random_state, n_samples=n_samples
-        )
+
+        def model_template():
+            return build_surrogate_model(model_type, params, random_state=random_state, n_samples=n_samples)
+
         split_kwargs = {"groups": effective_groups} if effective_groups is not None else {}
         splits = list(cv_splitter.split(X, y, **split_kwargs))
         val_scores: list[float] = []

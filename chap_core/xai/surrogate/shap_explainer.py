@@ -5,7 +5,6 @@ for feature attributions. A surrogate is needed because CHAP models run in Docke
 containers and cannot be called at explanation time.
 """
 
-import io
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -248,70 +247,6 @@ class SurrogateSHAPExplainer:
 
         return baseline_t
 
-    def to_bytes(self) -> bytes:
-        """Serialize the fitted surrogate model to bytes."""
-        import joblib  # type: ignore[import-untyped]
-
-        if not self._is_fitted:
-            raise RuntimeError("Call fit() before to_bytes().")
-        buf = io.BytesIO()
-        joblib.dump(
-            {
-                "model": self._model,
-                "feature_names": self.feature_names,
-                "model_config": self.model_config,
-                "hyperparams": self.hyperparams,
-                "quality": self.quality,
-                "imputation_rates": self.imputation_rates,
-                "keep_indices": self._keep_indices,
-                "kept_feature_names": self._kept_feature_names,
-                "target_transformed": self._target_transform_method is not None,
-                "target_transform_method": self._target_transform_method,
-                "X_train": self._X_train,
-            },
-            buf,
-        )
-        return buf.getvalue()
-
-    @classmethod
-    def from_bytes(cls, data: bytes) -> "SurrogateSHAPExplainer":
-        """Deserialize a stored surrogate model."""
-        import joblib
-
-        buf = io.BytesIO(data)
-        state = joblib.load(buf)
-
-        # "gbm" key is the old serialization format — kept for backward compat
-        model = state.get("model") or state.get("gbm")
-        model_config = state.get("model_config", {})
-
-        instance = cls(
-            feature_names=state["feature_names"],
-            model_config=model_config,
-            hyperparams=state.get("hyperparams"),
-            imputation_rates=state.get("imputation_rates", {}),
-        )
-        instance._model = model
-        instance._keep_indices = state.get("keep_indices")
-        instance._kept_feature_names = state.get("kept_feature_names")
-        instance._X_train = state.get("X_train")
-        # Backward compat: old models have target_transformed but no target_transform_method
-        target_transform_method = state.get("target_transform_method")
-        if target_transform_method is None and state.get("target_transformed", False):
-            target_transform_method = "log1p"
-        instance._target_transform_method = target_transform_method
-
-        quality = state.get("quality")
-        model_type = model_config.get("model_type", DEFAULT_MODEL_TYPE)
-        if model_type == "auto":
-            model_type = quality.selected_model_type if quality and quality.selected_model_type else DEFAULT_MODEL_TYPE
-        is_transformed = target_transform_method is not None
-        shap_model = model.regressor_ if is_transformed and hasattr(model, "regressor_") else model
-        instance._shap_explainer = cls._try_build_shap_explainer(shap_model, model_type, instance._X_train)
-        instance._is_fitted = True
-        instance.quality = quality
-        return instance
-
     def predict(self, X: np.ndarray) -> np.ndarray:
         if not self._is_fitted:
             raise RuntimeError("Call fit() before predict().")
@@ -426,74 +361,6 @@ class SurrogateSHAPExplainer:
             baseline_prediction=baseline,
             actual_prediction=actual,
         )
-
-    def explain_local_with_interactions(
-        self,
-        X: np.ndarray,
-        instance_idx: int,
-        prediction_id: int,
-        org_unit: str,
-        period: str,
-        feature_actual_values: dict[str, float],
-        top_k: int = 10,
-        output_statistic: str = "median",
-        actual_forecast_value: float | None = None,
-        interaction_top_k: int = 3,
-    ) -> tuple[LocalExplanation, list[dict]]:
-        """Like explain_local but also returns SHAP interaction values for top features."""
-        local_exp = self.explain_local(
-            X=X,
-            instance_idx=instance_idx,
-            prediction_id=prediction_id,
-            org_unit=org_unit,
-            period=period,
-            feature_actual_values=feature_actual_values,
-            top_k=top_k,
-            output_statistic=output_statistic,
-            actual_forecast_value=actual_forecast_value,
-        )
-
-        interactions = self._compute_interactions(X, instance_idx, interaction_top_k)
-        return local_exp, interactions
-
-    def _compute_interactions(
-        self,
-        X: np.ndarray,
-        instance_idx: int,
-        top_k: int = 3,
-    ) -> list[dict]:
-        """Compute SHAP interaction values for a single instance."""
-        if self._shap_explainer is None:
-            return []
-        try:
-            X_f = self._filter_X(X)
-            iv_filtered = self._shap_explainer.shap_interaction_values(X_f[instance_idx : instance_idx + 1])[0]
-        except Exception as e:
-            logger.warning("SHAP interaction values not available: %s", e)
-            return []
-
-        n_feats = len(self.feature_names)
-        interaction_values = np.zeros((n_feats, n_feats))
-        keep = self._keep_indices if self._keep_indices is not None else list(range(n_feats))
-        interaction_values[np.ix_(keep, keep)] = iv_filtered
-
-        pairs: list[tuple[float, int, int]] = []
-        for i in range(n_feats):
-            pairs.extend((abs(float(interaction_values[i, j])), i, j) for j in range(i + 1, n_feats))
-        pairs.sort(reverse=True)
-
-        result = []
-        for _abs_val, i, j in pairs[:top_k]:
-            val = float(interaction_values[i, j])
-            result.append(
-                {
-                    "feature_1": self.feature_names[i],
-                    "feature_2": self.feature_names[j],
-                    "interaction_value": val,
-                    "direction": "positive" if val > 0 else "negative",
-                }
-            )
-        return result
 
     def _global_importances_fallback(self, X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Permutation-based global feature importances, used when shap is unavailable.

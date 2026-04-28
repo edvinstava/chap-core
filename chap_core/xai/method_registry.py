@@ -108,16 +108,6 @@ XAI_METHODS = [
         "supported_visualizations": ["importance"],
     },
     {
-        "id": 9,
-        "name": "permutation_importance",
-        "display_name": "Permutation Importance",
-        "description": "Estimates feature importance by permuting each feature and measuring the resulting change in predictions.",
-        "method_type": "perturbation",
-        "author": "CHAP",
-        "archived": True,
-        "supported_visualizations": ["importance"],
-    },
-    {
         "id": 10,
         "name": "native_shap",
         "display_name": "SHAP \u2014 Native (from model)",

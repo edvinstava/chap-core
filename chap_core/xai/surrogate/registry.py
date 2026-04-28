@@ -172,6 +172,7 @@ SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
         },
         "shap_type": "tree",
         "optional": False,
+        "auto_eligible": False,
     },
     "ridge": {
         "display_name": "Ridge Regression",
@@ -183,6 +184,7 @@ SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
         },
         "shap_type": "linear",
         "optional": False,
+        "auto_eligible": False,
     },
     "lasso": {
         "display_name": "Lasso Regression",
@@ -194,6 +196,7 @@ SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
         },
         "shap_type": "linear",
         "optional": False,
+        "auto_eligible": False,
     },
     "catboost": {
         "display_name": "CatBoost",
@@ -221,6 +224,7 @@ SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
         },
         "shap_type": "tree",
         "optional": True,
+        "auto_eligible": False,
     },
 }
 

@@ -47,13 +47,13 @@ from .dependencies import get_database_url, get_session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/xai", tags=["xai"])
+router = APIRouter(prefix="/xai")
 worker: CeleryPool[Any] = CeleryPool()
 
 _XAI_METHODS = [XaiMethodRead(**definition) for definition in XAI_METHOD_DEFINITIONS]
 
 
-@router.get("/methods", response_model=list[XaiMethodRead], response_model_by_alias=True)
+@router.get("/methods", response_model=list[XaiMethodRead], response_model_by_alias=True, tags=["XAI"])
 async def list_xai_methods(
     include_archived: bool = Query(False, alias="includeArchived"),
     prediction_id: int | None = Query(None, alias="predictionId"),
@@ -70,7 +70,7 @@ async def list_xai_methods(
     return methods
 
 
-@router.get("/methods/{name}", response_model=XaiMethodRead, response_model_by_alias=True)
+@router.get("/methods/{name}", response_model=XaiMethodRead, response_model_by_alias=True, tags=["XAI"])
 async def get_xai_method(name: str):
     method = validate_xai_method_name(name, allow_archived=True)
     return XaiMethodRead(**method)
@@ -80,6 +80,7 @@ async def get_xai_method(name: str):
     "/predictions/{predictionId}/explanations/run",
     response_model=JobResponse,
     response_model_by_alias=True,
+    tags=["XAI"],
 )
 async def run_explanations(
     prediction_id: Annotated[int, Path(alias="predictionId")],
@@ -103,6 +104,7 @@ async def run_explanations(
     "/predictions/{predictionId}/global",
     response_model=GlobalExplanationResponse,
     response_model_by_alias=True,
+    tags=["XAI"],
 )
 async def get_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
@@ -130,6 +132,7 @@ async def get_global_explanation(
     "/predictions/{predictionId}/global",
     response_model=GlobalExplanationResponse,
     response_model_by_alias=True,
+    tags=["XAI"],
 )
 async def compute_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
@@ -164,6 +167,7 @@ async def compute_global_explanation(
     "/predictions/{predictionId}/local",
     response_model=list[LocalExplanationResponse],
     response_model_by_alias=True,
+    tags=["XAI"],
 )
 async def list_local_explanations(
     prediction_id: Annotated[int, Path(alias="predictionId")],
@@ -207,6 +211,7 @@ async def list_local_explanations(
     "/predictions/{predictionId}/local",
     response_model=LocalExplanationResponse,
     response_model_by_alias=True,
+    tags=["XAI"],
 )
 async def compute_local_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
@@ -263,6 +268,7 @@ async def compute_local_explanation(
     "/predictions/{predictionId}/shap-beeswarm",
     response_model=ShapBeeswarmResponse,
     response_model_by_alias=True,
+    tags=["XAI"],
 )
 async def compute_shap_beeswarm(
     prediction_id: Annotated[int, Path(alias="predictionId")],
@@ -298,6 +304,7 @@ async def compute_shap_beeswarm(
     "/predictions/{predictionId}/local/horizon-summary",
     response_model=HorizonSummaryResponse,
     response_model_by_alias=True,
+    tags=["XAI"],
 )
 async def compute_horizon_summary(
     prediction_id: Annotated[int, Path(alias="predictionId")],
@@ -340,6 +347,7 @@ async def compute_horizon_summary(
     "/predictions/{predictionId}/local/{explanationId}",
     response_model=LocalExplanationResponse,
     response_model_by_alias=True,
+    tags=["XAI"],
 )
 async def get_local_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
@@ -352,7 +360,7 @@ async def get_local_explanation(
     return explanation_to_response(explanation)
 
 
-@router.delete("/predictions/{predictionId}/local/{explanationId}")
+@router.delete("/predictions/{predictionId}/local/{explanationId}", tags=["XAI"])
 async def delete_local_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     explanation_id: Annotated[int, Path(alias="explanationId")],

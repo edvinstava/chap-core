@@ -52,6 +52,7 @@ _TABLES_ADDED_BY_MIGRATIONS = [
     "predictionexplanation",
 ]
 
+
 def _pg_container():
     """Create and start a PostgreSQL testcontainer."""
     try:
