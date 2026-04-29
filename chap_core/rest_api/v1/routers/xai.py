@@ -135,7 +135,7 @@ async def get_global_explanation(
     response_model_by_alias=True,
     tags=["XAI"],
 )
-async def compute_global_explanation(
+def compute_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     top_k: int = Query(10, alias="topK"),
     xai_method: str = Query(SHAP_AUTO, alias="xaiMethod"),
@@ -214,7 +214,7 @@ async def list_local_explanations(
     response_model_by_alias=True,
     tags=["XAI"],
 )
-async def compute_local_explanation(
+def compute_local_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     request: LocalExplanationRequest,
     session: Session = Depends(get_session),
@@ -271,7 +271,7 @@ async def compute_local_explanation(
     response_model_by_alias=True,
     tags=["XAI"],
 )
-async def compute_shap_beeswarm(
+def compute_shap_beeswarm(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     output_statistic: str = Query("median", alias="outputStatistic"),
     xai_method: str = Query(SHAP_AUTO, alias="xaiMethod"),
@@ -307,7 +307,7 @@ async def compute_shap_beeswarm(
     response_model_by_alias=True,
     tags=["XAI"],
 )
-async def compute_horizon_summary(
+def compute_horizon_summary(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     org_unit: str = Query(..., alias="orgUnit"),
     output_statistic: str = Query("median", alias="outputStatistic"),
