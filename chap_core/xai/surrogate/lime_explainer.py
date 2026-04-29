@@ -4,12 +4,12 @@ from typing import Any
 import numpy as np
 
 from ..types import ExplanationMethod, FeatureAttribution, GlobalExplanation, LocalExplanation
-from .shap_explainer import SurrogateSHAPExplainer
+from .base import SurrogateExplainerBase
 
 logger = logging.getLogger(__name__)
 
 
-class SurrogateLIMEExplainer(SurrogateSHAPExplainer):
+class SurrogateLIMEExplainer(SurrogateExplainerBase):
     """
     Same configurable surrogate as SurrogateSHAPExplainer, but uses LIME for attributions.
 
