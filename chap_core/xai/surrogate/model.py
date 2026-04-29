@@ -460,9 +460,10 @@ def _run_tuning_study(
                 raise optuna.TrialPruned
         mean_val = float(np.mean(val_scores))
         var_penalty = stability_weight * float(np.std(val_scores)) if len(val_scores) > 1 else 0.0
-        overfit_penalty = overfit_weight * float(
-            np.mean(np.maximum(0.0, np.asarray(train_scores) - np.asarray(val_scores)))
-        )
+        mean_gap = float(np.mean(np.maximum(0.0, np.asarray(train_scores) - np.asarray(val_scores))))
+        if mean_gap > 0.5:
+            return float("-inf")
+        overfit_penalty = overfit_weight * mean_gap
         return mean_val - var_penalty - overfit_penalty
 
     # Use enough random startup trials so TPE has a good initial landscape estimate.

@@ -45,7 +45,10 @@ SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
         },
         "loo_params": {
             "n_estimators": 250,
-            "max_depth": 5,
+            "max_depth": 4,
+            "reg_lambda": 1.0,
+            "min_child_weight": 3,
+            "subsample": 0.8,
             "verbosity": 0,
         },
         "tunable_params": {
@@ -84,7 +87,7 @@ SUPPORTED_MODELS: dict[str, dict[str, Any]] = {
         },
         "tunable_params": {
             "n_estimators": {"type": "int", "low": 200, "high": 2000},
-            "num_leaves": {"type": "int", "low": 15, "high": 255},
+            "num_leaves": {"type": "int", "low": 10, "high": None, "high_n_fraction": 2},
             "learning_rate": {"type": "float", "low": 0.005, "high": 0.3, "log": True},
             "subsample": {"type": "float", "low": 0.5, "high": 1.0},
             "colsample_bytree": {"type": "float", "low": 0.4, "high": 1.0},
