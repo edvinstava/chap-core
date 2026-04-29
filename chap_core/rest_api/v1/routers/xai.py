@@ -50,8 +50,13 @@ worker: CeleryPool[Any] = CeleryPool()
 _XAI_METHODS = [XaiMethodRead(**definition) for definition in XAI_METHOD_DEFINITIONS]
 
 
+def _require_xai_method(xai_method: str = Query(SHAP_AUTO, alias="xaiMethod")) -> str:
+    validate_xai_method_name(xai_method)
+    return xai_method
+
+
 @router.get("/methods", response_model=list[XaiMethodRead], response_model_by_alias=True, tags=["XAI"])
-async def list_xai_methods(
+def list_xai_methods(
     include_archived: bool = Query(False, alias="includeArchived"),
     prediction_id: int | None = Query(None, alias="predictionId"),
     session: Session = Depends(get_session),
@@ -68,7 +73,7 @@ async def list_xai_methods(
 
 
 @router.get("/methods/{name}", response_model=XaiMethodRead, response_model_by_alias=True, tags=["XAI"])
-async def get_xai_method(name: str):
+def get_xai_method(name: str):
     method = validate_xai_method_name(name, allow_archived=True)
     return XaiMethodRead(**method)
 
@@ -79,7 +84,7 @@ async def get_xai_method(name: str):
     response_model_by_alias=True,
     tags=["XAI"],
 )
-async def run_explanations(
+def run_explanations(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     request: RunExplanationsRequest,
     database_url: str = Depends(get_database_url),
@@ -103,7 +108,7 @@ async def run_explanations(
     response_model_by_alias=True,
     tags=["XAI"],
 )
-async def get_global_explanation(
+def get_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     xai_method: str | None = Query(None, alias="xaiMethod"),
     session: Session = Depends(get_session),
@@ -134,12 +139,11 @@ async def get_global_explanation(
 def compute_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     top_k: int = Query(10, alias="topK"),
-    xai_method: str = Query(SHAP_AUTO, alias="xaiMethod"),
+    xai_method: str = Depends(_require_xai_method),
     output_statistic: str = Query("median", alias="outputStatistic"),
     force: bool = Query(False),
     session: Session = Depends(get_session),
 ):
-    validate_xai_method_name(xai_method)
     prediction = session.get(Prediction, prediction_id)
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
@@ -161,7 +165,7 @@ def compute_global_explanation(
     response_model_by_alias=True,
     tags=["XAI"],
 )
-async def list_local_explanations(
+def list_local_explanations(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     org_unit: str | None = Query(None, alias="orgUnit"),
     period: str | None = None,
@@ -219,10 +223,9 @@ def compute_local_explanation(
 def compute_shap_beeswarm(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     output_statistic: str = Query("median", alias="outputStatistic"),
-    xai_method: str = Query(SHAP_AUTO, alias="xaiMethod"),
+    xai_method: str = Depends(_require_xai_method),
     session: Session = Depends(get_session),
 ):
-    validate_xai_method_name(xai_method)
     prediction = session.get(Prediction, prediction_id)
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
@@ -246,10 +249,9 @@ def compute_horizon_summary(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     org_unit: str = Query(..., alias="orgUnit"),
     output_statistic: str = Query("median", alias="outputStatistic"),
-    xai_method: str = Query(SHAP_AUTO, alias="xaiMethod"),
+    xai_method: str = Depends(_require_xai_method),
     session: Session = Depends(get_session),
 ):
-    validate_xai_method_name(xai_method)
     prediction = session.get(Prediction, prediction_id)
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
@@ -274,7 +276,7 @@ def compute_horizon_summary(
     response_model_by_alias=True,
     tags=["XAI"],
 )
-async def get_local_explanation(
+def get_local_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     explanation_id: Annotated[int, Path(alias="explanationId")],
     session: Session = Depends(get_session),
@@ -286,7 +288,7 @@ async def get_local_explanation(
 
 
 @router.delete("/predictions/{predictionId}/local/{explanationId}", tags=["XAI"])
-async def delete_local_explanation(
+def delete_local_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     explanation_id: Annotated[int, Path(alias="explanationId")],
     session: Session = Depends(get_session),
