@@ -172,7 +172,6 @@ def _build_native_shap_metadata(native_shap: dict) -> dict:
     )
 
     return {
-        NATIVE_SHAP: native_shap,
         "xai": {
             "global_by_method": {
                 NATIVE_SHAP: {

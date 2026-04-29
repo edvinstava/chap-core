@@ -17,7 +17,7 @@ from ..method_registry import NATIVE_SHAP
 
 
 def has_native_shap(prediction: Any) -> bool:
-    return bool((prediction.meta_data or {}).get(NATIVE_SHAP))
+    return bool((prediction.meta_data or {}).get("xai", {}).get("global_by_method", {}).get(NATIVE_SHAP))
 
 
 def native_shap_global_response(

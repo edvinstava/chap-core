@@ -1,4 +1,4 @@
-"""Tests for native SHAP CSV parsing in chap_core.models.external_model."""
+"""Tests for native SHAP CSV parsing and metadata building."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ import pandas as pd
 import pytest
 
 from chap_core.models.external_model import _parse_shap_csv
+from chap_core.rest_api.db_worker_functions import _build_native_shap_metadata
+from chap_core.xai.method_registry import NATIVE_SHAP
 
 
 def _write_csv(tmp_path: Path, df: pd.DataFrame) -> Path:
@@ -75,3 +77,28 @@ def test_rejects_non_numeric_shap_column(tmp_path: Path):
     p = _write_csv(tmp_path, df)
     with pytest.raises(ValueError, match="shap__rainfall"):
         _parse_shap_csv(p)
+
+
+def _sample_native_shap() -> dict:
+    return {
+        "feature_names": ["rainfall", "temp"],
+        "expected_value": 10.0,
+        "values": [
+            {"location": "A", "time_period": "2024-01", "shap_values": [0.5, -0.3], "expected_value": 10.0},
+            {"location": "B", "time_period": "2024-01", "shap_values": [-0.2, 0.4], "expected_value": 10.0},
+        ],
+    }
+
+
+def test_build_native_shap_metadata_excludes_raw_values():
+    native_shap = _sample_native_shap()
+    meta = _build_native_shap_metadata(native_shap)
+    assert NATIVE_SHAP not in meta, "raw SHAP rows must not be stored in meta_data"
+
+
+def test_build_native_shap_metadata_contains_global_summary():
+    native_shap = _sample_native_shap()
+    meta = _build_native_shap_metadata(native_shap)
+    global_entry = meta["xai"]["global_by_method"][NATIVE_SHAP]
+    assert global_entry["nSamples"] == 2
+    assert len(global_entry["topFeatures"]) == 2

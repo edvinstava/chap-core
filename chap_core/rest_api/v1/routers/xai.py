@@ -282,13 +282,13 @@ async def compute_shap_beeswarm(
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
 
-    stored = session.exec(
-        select(PredictionExplanation).where(
-            PredictionExplanation.prediction_id == prediction_id,
-            PredictionExplanation.method == xai_method,
-            PredictionExplanation.output_statistic == output_statistic,
-        )
-    ).all()
+    stored_query = select(PredictionExplanation).where(
+        PredictionExplanation.prediction_id == prediction_id,
+        PredictionExplanation.method == xai_method,
+    )
+    if xai_method != NATIVE_SHAP:
+        stored_query = stored_query.where(PredictionExplanation.output_statistic == output_statistic)
+    stored = session.exec(stored_query).all()
     if stored:
         return beeswarm_from_stored(prediction_id, output_statistic, stored)
 
@@ -322,14 +322,14 @@ async def compute_horizon_summary(
     if not prediction.forecasts:
         raise HTTPException(status_code=400, detail="No forecasts found for prediction")
 
-    stored_unit = session.exec(
-        select(PredictionExplanation).where(
-            PredictionExplanation.prediction_id == prediction_id,
-            PredictionExplanation.org_unit == org_unit,
-            PredictionExplanation.method == xai_method,
-            PredictionExplanation.output_statistic == output_statistic,
-        )
-    ).all()
+    stored_unit_query = select(PredictionExplanation).where(
+        PredictionExplanation.prediction_id == prediction_id,
+        PredictionExplanation.org_unit == org_unit,
+        PredictionExplanation.method == xai_method,
+    )
+    if xai_method != NATIVE_SHAP:
+        stored_unit_query = stored_unit_query.where(PredictionExplanation.output_statistic == output_statistic)
+    stored_unit = session.exec(stored_unit_query).all()
     if stored_unit:
         return horizon_summary_from_stored(prediction_id, org_unit, xai_method, output_statistic, stored_unit)
 
