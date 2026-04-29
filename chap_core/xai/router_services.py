@@ -5,10 +5,11 @@ from typing import Any, cast
 import numpy as np
 from fastapi import HTTPException
 from sqlalchemy.orm.attributes import flag_modified
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from chap_core.database.database import SessionWrapper
 from chap_core.database.tables import Prediction
+from chap_core.database.xai_tables import PredictionExplanation
 from chap_core.rest_api.v1.xai_schemas import (
     GlobalExplanationResponse,
     HorizonSummaryResponse,
@@ -20,6 +21,7 @@ from chap_core.rest_api.v1.xai_schemas import (
 from chap_core.xai.forecast_matching import find_forecast_row_index
 from chap_core.xai.method_registry import NATIVE_SHAP, XAI_METHODS
 from chap_core.xai.responses.native_shap import (
+    list_filtered_native_shap_locals,
     native_shap_beeswarm,
     native_shap_global_response,
     native_shap_local_response,
@@ -27,8 +29,10 @@ from chap_core.xai.responses.native_shap import (
 from chap_core.xai.responses.native_shap_horizon import build_native_shap_horizon_summary
 from chap_core.xai.responses.quality import quality_response_dict
 from chap_core.xai.responses.stored_views import (
+    beeswarm_from_stored,
     build_local_explanation_record,
     explanation_to_response,
+    horizon_summary_from_stored,
 )
 from chap_core.xai.surrogate.methods import METHOD_TO_MODEL_TYPE
 from chap_core.xai.surrogate.pipeline import build_surrogate_data, fit_surrogate_explainer
@@ -381,3 +385,138 @@ def compute_horizon_summary_service(
         surrogate_context.feature_names,
         surrogate_context.explainer,
     )
+
+
+def normalize_list_period(
+    forecasts: list[Any],
+    org_unit: str | None,
+    period: str,
+    xai_method: str | None,
+) -> str:
+    if xai_method != NATIVE_SHAP and "_" in period and org_unit and forecasts:
+        idx = find_forecast_row_index(forecasts, org_unit, period)
+        if idx is not None:
+            return str(forecasts[idx].period)
+    return period
+
+
+def fetch_local_explanations_service(
+    session: Session,
+    prediction_id: int,
+    prediction: Prediction,
+    org_unit: str | None,
+    period: str | None,
+    xai_method: str | None,
+) -> list[Any]:
+    query = select(PredictionExplanation).where(PredictionExplanation.prediction_id == prediction_id)
+    if org_unit:
+        query = query.where(PredictionExplanation.org_unit == org_unit)
+    if period:
+        canonical_period = normalize_list_period(prediction.forecasts, org_unit, period, xai_method)
+        query = query.where(PredictionExplanation.period == canonical_period)
+    if xai_method:
+        query = query.where(PredictionExplanation.method == xai_method)
+
+    explanations = session.exec(query).all()
+
+    if not explanations and xai_method == NATIVE_SHAP:
+        native_items = list_filtered_native_shap_locals(
+            prediction_id, prediction, org_unit, period, output_statistic="median"
+        )
+        if native_items:
+            return native_items
+
+    return [explanation_to_response(exp) for exp in explanations]
+
+
+def get_or_compute_local_explanation(
+    session: Session,
+    prediction: Prediction,
+    prediction_id: int,
+    instance_idx: int | None,
+    canonical_period: str,
+    request: LocalExplanationRequest,
+) -> Any:
+    existing = session.exec(
+        select(PredictionExplanation).where(
+            PredictionExplanation.prediction_id == prediction_id,
+            PredictionExplanation.org_unit == request.org_unit,
+            PredictionExplanation.period == canonical_period,
+            PredictionExplanation.method == request.xai_method,
+        )
+    ).first()
+
+    if existing and request.force:
+        session.delete(existing)
+        session.commit()
+        existing = None
+
+    if existing:
+        return explanation_to_response(existing)
+
+    if instance_idx is None:
+        available = list({f.org_unit for f in prediction.forecasts})
+        raise HTTPException(
+            status_code=404,
+            detail=f"No forecast found for org_unit={request.org_unit}. Available: {available[:10]}",
+        )
+
+    return compute_local_explanation_service(
+        session, prediction, prediction_id, instance_idx, canonical_period, request
+    )
+
+
+def get_or_compute_beeswarm(
+    session: Session,
+    prediction: Prediction,
+    prediction_id: int,
+    output_statistic: str,
+    xai_method: str,
+) -> ShapBeeswarmResponse:
+    stored_query = select(PredictionExplanation).where(
+        PredictionExplanation.prediction_id == prediction_id,
+        PredictionExplanation.method == xai_method,
+    )
+    if xai_method != NATIVE_SHAP:
+        stored_query = stored_query.where(PredictionExplanation.output_statistic == output_statistic)
+    stored = session.exec(stored_query).all()
+    if stored:
+        return beeswarm_from_stored(prediction_id, output_statistic, stored)
+    return compute_beeswarm_service(session, prediction, prediction_id, output_statistic, xai_method)
+
+
+def get_or_compute_horizon_summary(
+    session: Session,
+    prediction: Prediction,
+    prediction_id: int,
+    org_unit: str,
+    output_statistic: str,
+    xai_method: str,
+) -> HorizonSummaryResponse:
+    stored_query = select(PredictionExplanation).where(
+        PredictionExplanation.prediction_id == prediction_id,
+        PredictionExplanation.org_unit == org_unit,
+        PredictionExplanation.method == xai_method,
+    )
+    if xai_method != NATIVE_SHAP:
+        stored_query = stored_query.where(PredictionExplanation.output_statistic == output_statistic)
+    stored = session.exec(stored_query).all()
+    if stored:
+        return horizon_summary_from_stored(prediction_id, org_unit, xai_method, output_statistic, stored)
+    return compute_horizon_summary_service(session, prediction, prediction_id, org_unit, output_statistic, xai_method)
+
+
+def get_or_compute_global_explanation(
+    session: Session,
+    prediction: Prediction,
+    prediction_id: int,
+    xai_method: str,
+    top_k: int,
+    output_statistic: str,
+    force: bool,
+) -> GlobalExplanationResponse:
+    if not force:
+        entry = load_global_entry(prediction.meta_data, xai_method)
+        if entry:
+            return global_response_from_entry(xai_method, entry)
+    return compute_global_explanation_service(session, prediction, prediction_id, xai_method, top_k, output_statistic)

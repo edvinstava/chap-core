@@ -8,7 +8,7 @@ import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from chap_core.database.tables import Prediction
 from chap_core.database.xai_tables import PredictionExplanation
@@ -24,20 +24,16 @@ from chap_core.rest_api.v1.xai_schemas import (
     XaiMethodRead,
 )
 from chap_core.xai.batch_explanations import run_explanations_task
-from chap_core.xai.forecast_matching import find_forecast_row_index
 from chap_core.xai.method_registry import NATIVE_SHAP, SHAP_AUTO
 from chap_core.xai.method_registry import XAI_METHODS as XAI_METHOD_DEFINITIONS
-from chap_core.xai.responses.native_shap import has_native_shap, list_filtered_native_shap_locals
-from chap_core.xai.responses.stored_views import (
-    beeswarm_from_stored,
-    explanation_to_response,
-    horizon_summary_from_stored,
-)
+from chap_core.xai.responses.native_shap import has_native_shap
+from chap_core.xai.responses.stored_views import explanation_to_response
 from chap_core.xai.router_services import (
-    compute_beeswarm_service,
-    compute_global_explanation_service,
-    compute_horizon_summary_service,
-    compute_local_explanation_service,
+    fetch_local_explanations_service,
+    get_or_compute_beeswarm,
+    get_or_compute_global_explanation,
+    get_or_compute_horizon_summary,
+    get_or_compute_local_explanation,
     global_response_from_entry,
     load_global_entry,
     resolve_canonical_period,
@@ -148,14 +144,9 @@ def compute_global_explanation(
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
 
-    if not force:
-        entry = load_global_entry(prediction.meta_data, xai_method)
-        if entry:
-            return global_response_from_entry(xai_method, entry)
-
     try:
-        return compute_global_explanation_service(
-            session, prediction, prediction_id, xai_method, top_k, output_statistic
+        return get_or_compute_global_explanation(
+            session, prediction, prediction_id, xai_method, top_k, output_statistic, force
         )
     except HTTPException:
         raise
@@ -183,29 +174,7 @@ async def list_local_explanations(
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
 
-    query = select(PredictionExplanation).where(PredictionExplanation.prediction_id == prediction_id)
-    if org_unit:
-        query = query.where(PredictionExplanation.org_unit == org_unit)
-    if period:
-        canonical_period = period
-        if xai_method != NATIVE_SHAP and "_" in period and org_unit and prediction.forecasts:
-            idx = find_forecast_row_index(prediction.forecasts, org_unit, period)
-            if idx is not None:
-                canonical_period = prediction.forecasts[idx].period
-        query = query.where(PredictionExplanation.period == canonical_period)
-    if xai_method:
-        query = query.where(PredictionExplanation.method == xai_method)
-
-    explanations = session.exec(query).all()
-
-    if not explanations and xai_method == NATIVE_SHAP:
-        native_items = list_filtered_native_shap_locals(
-            prediction_id, prediction, org_unit, period, output_statistic="median"
-        )
-        if native_items:
-            return native_items
-
-    return [explanation_to_response(exp) for exp in explanations]
+    return fetch_local_explanations_service(session, prediction_id, prediction, org_unit, period, xai_method)
 
 
 @router.post(
@@ -230,32 +199,8 @@ def compute_local_explanation(
 
     instance_idx, canonical_period = resolve_canonical_period(all_forecasts, request.org_unit, request.period)
 
-    existing = session.exec(
-        select(PredictionExplanation).where(
-            PredictionExplanation.prediction_id == prediction_id,
-            PredictionExplanation.org_unit == request.org_unit,
-            PredictionExplanation.period == canonical_period,
-            PredictionExplanation.method == request.xai_method,
-        )
-    ).first()
-
-    if existing and request.force:
-        session.delete(existing)
-        session.commit()
-        existing = None
-
-    if existing:
-        return explanation_to_response(existing)
-
-    if instance_idx is None:
-        available = list({f.org_unit for f in all_forecasts})
-        raise HTTPException(
-            status_code=404,
-            detail=f"No forecast found for org_unit={request.org_unit}. Available: {available[:10]}",
-        )
-
     try:
-        return compute_local_explanation_service(
+        return get_or_compute_local_explanation(
             session, prediction, prediction_id, instance_idx, canonical_period, request
         )
     except HTTPException:
@@ -282,18 +227,8 @@ def compute_shap_beeswarm(
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
 
-    stored_query = select(PredictionExplanation).where(
-        PredictionExplanation.prediction_id == prediction_id,
-        PredictionExplanation.method == xai_method,
-    )
-    if xai_method != NATIVE_SHAP:
-        stored_query = stored_query.where(PredictionExplanation.output_statistic == output_statistic)
-    stored = session.exec(stored_query).all()
-    if stored:
-        return beeswarm_from_stored(prediction_id, output_statistic, stored)
-
     try:
-        return compute_beeswarm_service(session, prediction, prediction_id, output_statistic, xai_method)
+        return get_or_compute_beeswarm(session, prediction, prediction_id, output_statistic, xai_method)
     except HTTPException:
         raise
     except Exception as e:
@@ -322,19 +257,8 @@ def compute_horizon_summary(
     if not prediction.forecasts:
         raise HTTPException(status_code=400, detail="No forecasts found for prediction")
 
-    stored_unit_query = select(PredictionExplanation).where(
-        PredictionExplanation.prediction_id == prediction_id,
-        PredictionExplanation.org_unit == org_unit,
-        PredictionExplanation.method == xai_method,
-    )
-    if xai_method != NATIVE_SHAP:
-        stored_unit_query = stored_unit_query.where(PredictionExplanation.output_statistic == output_statistic)
-    stored_unit = session.exec(stored_unit_query).all()
-    if stored_unit:
-        return horizon_summary_from_stored(prediction_id, org_unit, xai_method, output_statistic, stored_unit)
-
     try:
-        return compute_horizon_summary_service(
+        return get_or_compute_horizon_summary(
             session, prediction, prediction_id, org_unit, output_statistic, xai_method
         )
     except HTTPException:
