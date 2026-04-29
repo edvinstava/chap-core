@@ -161,10 +161,15 @@ def _build_native_shap_metadata(native_shap: dict) -> dict:
         np.array([v["shap_values"] for v in values], dtype=float) if values else np.zeros((0, len(feature_names)))
     )
     mean_abs = np.mean(np.abs(shap_matrix), axis=0) if n_samples > 0 else np.zeros(len(feature_names))
+    mean_signed = np.mean(shap_matrix, axis=0) if n_samples > 0 else np.zeros(len(feature_names))
 
     top_features = sorted(
         [
-            {"feature_name": fn, "importance": float(mean_abs[i]), "direction": None}
+            {
+                "feature_name": fn,
+                "importance": float(mean_abs[i]),
+                "direction": "positive" if mean_signed[i] >= 0 else "negative",
+            }
             for i, fn in enumerate(feature_names)
         ],
         key=lambda x: x["importance"],

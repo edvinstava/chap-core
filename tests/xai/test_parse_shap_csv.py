@@ -102,3 +102,18 @@ def test_build_native_shap_metadata_contains_global_summary():
     global_entry = meta["xai"]["global_by_method"][NATIVE_SHAP]
     assert global_entry["nSamples"] == 2
     assert len(global_entry["topFeatures"]) == 2
+
+
+def test_build_native_shap_metadata_direction():
+    native_shap = {
+        "feature_names": ["rain", "temp"],
+        "expected_value": 0.0,
+        "values": [
+            {"location": "A", "time_period": "2024-01", "shap_values": [1.0, -2.0]},
+            {"location": "B", "time_period": "2024-01", "shap_values": [0.5, -1.0]},
+        ],
+    }
+    meta = _build_native_shap_metadata(native_shap)
+    features = {f["feature_name"]: f for f in meta["xai"]["global_by_method"][NATIVE_SHAP]["topFeatures"]}
+    assert features["rain"]["direction"] == "positive"
+    assert features["temp"]["direction"] == "negative"
