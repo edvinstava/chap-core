@@ -68,13 +68,10 @@ def find_forecast_row_index(forecasts: list[Any], org_unit: str, period: str) ->
     if len(unit_indices) == 1:
         return unit_indices[0]
 
-    first = unit_indices[0]
     logger.warning(
-        "Period %s not found for org_unit=%s; using first available index %s (forecast period=%s). Known periods: %s",
+        "Period %s not found for org_unit=%s. Known periods: %s",
         period,
         org_unit,
-        first,
-        forecasts[first].period,
         [forecasts[i].period for i in unit_indices[:12]],
     )
-    return first
+    return None
