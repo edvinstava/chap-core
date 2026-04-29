@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, cast
 
 import numpy as np
@@ -85,10 +86,11 @@ def load_global_entry(meta_data: dict[str, Any] | None, xai_method: str) -> dict
 
 
 def global_response_from_entry(xai_method: str, entry: dict[str, Any]) -> GlobalExplanationResponse:
+    computed_at_str = entry.get("computedAt")
     return GlobalExplanationResponse(
         method=xai_method,
         top_features=entry.get("topFeatures", []),
-        computed_at=entry.get("computedAt"),
+        computed_at=datetime.fromisoformat(computed_at_str) if computed_at_str else None,
         n_samples=entry.get("nSamples", 0),
         stability_score=entry.get("stabilityScore"),
         available=True,
@@ -240,7 +242,7 @@ def compute_global_explanation_service(
     return GlobalExplanationResponse(
         method=xai_method,
         top_features=[f.model_dump() for f in global_exp.top_features],
-        computed_at=global_exp.computed_at.isoformat(),
+        computed_at=global_exp.computed_at,
         n_samples=global_exp.n_samples,
         stability_score=global_exp.stability_score,
         available=True,

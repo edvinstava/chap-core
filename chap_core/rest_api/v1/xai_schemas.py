@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -8,7 +9,7 @@ from chap_core.database.base_tables import DBModel
 class GlobalExplanationResponse(DBModel):
     method: str
     top_features: list[dict[str, Any]]
-    computed_at: str | None = None
+    computed_at: datetime | None = None
     n_samples: int = 0
     stability_score: float | None = None
     available: bool = True
@@ -43,7 +44,7 @@ class LocalExplanationResponse(DBModel):
 
 
 class RunExplanationsRequest(BaseModel):
-    xai_method_name: str = Field("shap_auto", alias="xaiMethodName")
+    xai_method: str = Field("shap_auto", alias="xaiMethod")
     output_statistic: str = Field("median", alias="outputStatistic")
     top_k: int = Field(10, alias="topK")
 

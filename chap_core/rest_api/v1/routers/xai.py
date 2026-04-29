@@ -88,11 +88,11 @@ async def run_explanations(
     request: RunExplanationsRequest,
     database_url: str = Depends(get_database_url),
 ):
-    validate_xai_method_name(request.xai_method_name)
+    validate_xai_method_name(request.xai_method)
     job = worker.queue_db(
         run_explanations_task,
         prediction_id,
-        request.xai_method_name,
+        request.xai_method,
         request.output_statistic,
         request.top_k,
         database_url=database_url,
