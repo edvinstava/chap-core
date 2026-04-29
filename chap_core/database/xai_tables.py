@@ -28,7 +28,3 @@ class PredictionExplanationBase(DBModel):
 class PredictionExplanation(PredictionExplanationBase, table=True):
     id: int | None = Field(primary_key=True, default=None)
     prediction: Prediction = Relationship()
-
-
-class PredictionExplanationRead(PredictionExplanationBase):
-    id: int
