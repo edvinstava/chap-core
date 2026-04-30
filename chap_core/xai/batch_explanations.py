@@ -90,7 +90,6 @@ def run_explanations_task(
                 "feature_attributions": [f.model_dump() for f in local_exp.feature_attributions],
                 "baseline_prediction": local_exp.baseline_prediction,
                 "actual_prediction": local_exp.actual_prediction,
-                "xai_method_name": xai_method_name,
                 "surrogate_quality": quality_response_dict(quality),
                 "covariate_provenance": covariate_provenance_rows[idx],
             },

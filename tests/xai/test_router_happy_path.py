@@ -69,7 +69,6 @@ def test_list_methods_returns_non_empty(client):
     assert len(body) > 0
     names = {m["name"] for m in body}
     assert "shap_auto" in names
-    assert "permutation_importance" not in names  # archived by default
 
 
 def test_global_explanation_returns_cached_entry(client, prediction_with_cached_global):

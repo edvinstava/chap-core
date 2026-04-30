@@ -2,7 +2,6 @@
 Data types for XAI explanations.
 """
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
@@ -42,9 +41,3 @@ class LocalExplanation(BaseModel):
     baseline_prediction: float
     actual_prediction: float
     computed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-
-@dataclass
-class ForecastLookupRow:
-    org_unit: str
-    period: str

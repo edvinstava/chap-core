@@ -52,7 +52,6 @@ class SurrogateLIMEExplainer(SurrogateExplainerBase):
         self,
         X: np.ndarray,
         top_k: int = 10,
-        n_bootstrap: int = 20,
         random_state: int = 42,
     ) -> GlobalExplanation:
         """Aggregate LIME importances across a sample of instances for global view."""

@@ -77,7 +77,6 @@ class HorizonStepSummary(DBModel):
     period: str
     target_period: str
     forecast_step: int
-    data_source: dict[str, Any] | None = None
     feature_importances: list[HorizonFeatureImportance]
     actual_prediction: float | None = None
 

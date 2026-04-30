@@ -89,7 +89,6 @@ def build_native_shap_horizon_summary(
                 "period": fc.period,
                 "target_period": fc.period,
                 "forecast_step": step_num,
-                "data_source": None,
                 "feature_importances": feat_imps,
                 "actual_prediction": actual_prediction,
             }

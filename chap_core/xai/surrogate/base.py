@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MIN_SAMPLES_GLOBAL = 10
-MIN_SAMPLES_LOCAL = 3
 
 
 class SurrogateExplainerBase:

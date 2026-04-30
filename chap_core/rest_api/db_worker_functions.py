@@ -231,7 +231,6 @@ def _store_native_shap_explanations(native_shap: dict, prediction_id: int, sessi
                 "feature_attributions": feature_attributions,
                 "baseline_prediction": expected_value,
                 "actual_prediction": actual_prediction,
-                "xai_method_name": NATIVE_SHAP,
                 "surrogate_quality": None,
                 "covariate_provenance": None,
             },
