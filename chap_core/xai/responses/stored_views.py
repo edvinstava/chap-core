@@ -16,6 +16,23 @@ from chap_core.rest_api.v1.xai_schemas import (
 from chap_core.xai.responses.quality import quality_response_dict
 
 
+def compute_avg_importance(all_importances: dict[str, list[float]]) -> list[AverageImportance]:
+    avg: list[AverageImportance] = []
+    for fname, vals in all_importances.items():
+        mean_signed = float(np.mean(vals)) if vals else 0.0
+        mean_abs = float(np.mean(np.abs(vals))) if vals else 0.0
+        avg.append(
+            AverageImportance(
+                feature_name=fname,
+                mean_abs_importance=mean_abs,
+                mean_signed_importance=mean_signed,
+                direction="positive" if mean_signed >= 0 else "negative",
+            )
+        )
+    avg.sort(key=lambda x: x.mean_abs_importance, reverse=True)
+    return avg
+
+
 def explanation_to_response(exp: PredictionExplanation) -> LocalExplanationResponse:
     result = exp.result or {}
     return LocalExplanationResponse(
@@ -143,19 +160,7 @@ def horizon_summary_from_stored(
             )
         )
 
-    avg_importance: list[AverageImportance] = []
-    for fname, vals in all_importances.items():
-        mean_signed = float(np.mean(vals)) if vals else 0.0
-        mean_abs = float(np.mean(np.abs(vals))) if vals else 0.0
-        avg_importance.append(
-            AverageImportance(
-                feature_name=fname,
-                mean_abs_importance=mean_abs,
-                mean_signed_importance=mean_signed,
-                direction="positive" if mean_signed >= 0 else "negative",
-            )
-        )
-    avg_importance.sort(key=lambda x: x.mean_abs_importance, reverse=True)
+    avg_importance = compute_avg_importance(all_importances)
 
     return HorizonSummaryResponse(
         prediction_id=prediction_id,

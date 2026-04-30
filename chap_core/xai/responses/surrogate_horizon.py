@@ -3,13 +3,13 @@ from typing import Any
 import numpy as np
 
 from chap_core.rest_api.v1.xai_schemas import (
-    AverageImportance,
     HorizonFeatureImportance,
     HorizonStepSummary,
     HorizonSummaryResponse,
 )
 from chap_core.xai.forecast_utils import forecast_actual_value
 from chap_core.xai.responses.quality import quality_response_dict
+from chap_core.xai.responses.stored_views import compute_avg_importance
 
 
 def horizon_summary_from_surrogate(
@@ -67,20 +67,7 @@ def horizon_summary_from_surrogate(
             )
         )
 
-    avg_importance: list[AverageImportance] = []
-    for fname in feature_names:
-        vals = all_importances[fname]
-        mean_signed = float(np.mean(vals)) if vals else 0.0
-        mean_abs = float(np.mean(np.abs(vals))) if vals else 0.0
-        avg_importance.append(
-            AverageImportance(
-                feature_name=fname,
-                mean_abs_importance=mean_abs,
-                mean_signed_importance=mean_signed,
-                direction="positive" if mean_signed >= 0 else "negative",
-            )
-        )
-    avg_importance.sort(key=lambda x: x.mean_abs_importance, reverse=True)
+    avg_importance = compute_avg_importance(all_importances)
 
     return HorizonSummaryResponse(
         prediction_id=prediction_id,

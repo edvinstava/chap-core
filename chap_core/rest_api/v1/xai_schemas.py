@@ -4,11 +4,13 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from chap_core.database.base_tables import DBModel
+from chap_core.xai.method_registry import SHAP_AUTO
+from chap_core.xai.types import FeatureAttribution
 
 
 class GlobalExplanationResponse(DBModel):
     method: str
-    top_features: list[dict[str, Any]]
+    top_features: list[FeatureAttribution]
     computed_at: datetime | None = None
     n_samples: int = 0
     stability_score: float | None = None
@@ -20,7 +22,7 @@ class LocalExplanationRequest(BaseModel):
     org_unit: str = Field(..., alias="orgUnit")
     period: str
     output_statistic: str = Field("median", alias="outputStatistic")
-    xai_method: str = Field("shap_auto", alias="xaiMethod")
+    xai_method: str = Field(SHAP_AUTO, alias="xaiMethod")
     top_k: int = Field(10, alias="topK")
     force: bool = False
 
@@ -34,7 +36,7 @@ class LocalExplanationResponse(DBModel):
     period: str
     method: str
     output_statistic: str
-    feature_attributions: list[dict]
+    feature_attributions: list[FeatureAttribution]
     baseline_prediction: float
     actual_prediction: float
     computed_at: datetime | None = None
@@ -44,7 +46,7 @@ class LocalExplanationResponse(DBModel):
 
 
 class RunExplanationsRequest(BaseModel):
-    xai_method: str = Field("shap_auto", alias="xaiMethod")
+    xai_method: str = Field(SHAP_AUTO, alias="xaiMethod")
     output_statistic: str = Field("median", alias="outputStatistic")
     top_k: int = Field(10, alias="topK")
 

@@ -38,6 +38,10 @@ _XAI_METHOD_DEFINITIONS_BY_NAME = {method["name"]: method for method in XAI_METH
 _NON_FEATURE_FIELDS = {"time_period", "period", "date", "location"}
 
 
+def _get_dataset(session: Session, dataset_id: int) -> Any:
+    return SessionWrapper(session=session).get_dataset(dataset_id)
+
+
 def resolve_feature_names(dataset: Any) -> list[str]:
     try:
         feature_names = [f for f in dataset.field_names() if f not in _NON_FEATURE_FIELDS]
@@ -203,7 +207,7 @@ def compute_global_explanation_service(
     if not forecasts:
         raise HTTPException(status_code=400, detail="No forecasts found for prediction")
 
-    dataset = SessionWrapper(session=session).get_dataset(prediction.dataset_id)
+    dataset = _get_dataset(session, prediction.dataset_id)
     feature_names = resolve_feature_names(dataset)
 
     if xai_method == NATIVE_SHAP:
@@ -221,7 +225,7 @@ def compute_global_explanation_service(
 
     return GlobalExplanationResponse(
         method=xai_method,
-        top_features=[f.model_dump() for f in global_exp.top_features],
+        top_features=global_exp.top_features,
         computed_at=global_exp.computed_at,
         n_samples=global_exp.n_samples,
         stability_score=global_exp.stability_score,
@@ -239,7 +243,7 @@ def compute_local_explanation_service(
     request: LocalExplanationRequest,
 ) -> LocalExplanationResponse:
     all_forecasts = prediction.forecasts
-    dataset = SessionWrapper(session=session).get_dataset(prediction.dataset_id)
+    dataset = _get_dataset(session, prediction.dataset_id)
     feature_names = resolve_feature_names(dataset)
 
     if request.xai_method == NATIVE_SHAP:
@@ -295,7 +299,7 @@ def compute_beeswarm_service(
     if not forecasts:
         raise HTTPException(status_code=400, detail="No forecasts found for prediction")
 
-    dataset = SessionWrapper(session=session).get_dataset(prediction.dataset_id)
+    dataset = _get_dataset(session, prediction.dataset_id)
     feature_names = resolve_feature_names(dataset)
 
     if xai_method == NATIVE_SHAP:
@@ -328,7 +332,7 @@ def compute_horizon_summary_service(
             )
         return HorizonSummaryResponse.model_validate(built)
 
-    dataset = SessionWrapper(session=session).get_dataset(prediction.dataset_id)
+    dataset = _get_dataset(session, prediction.dataset_id)
     feature_names = resolve_feature_names(dataset)
     surrogate_context = build_surrogate_context(
         prediction_id, forecasts, dataset, feature_names, output_statistic, xai_method
