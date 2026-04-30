@@ -16,7 +16,7 @@ def run_explanations_task(
     output_statistic: str,
     top_k: int,
     session: SessionWrapper,
-) -> None:
+) -> int:
     status_logger = get_status_logger()
     status_logger.info(
         "Starting XAI explanations (prediction=%d, method=%s, statistic=%s)",
@@ -36,7 +36,7 @@ def run_explanations_task(
         if not has_native_shap(prediction):
             raise ValueError(f"Prediction {prediction_id} has no native SHAP data")
         status_logger.info("Native SHAP: explanations already stored, skipping surrogate fitting")
-        return
+        return prediction_id
 
     dataset = session.get_dataset(prediction.dataset_id)
     feature_names = resolve_feature_names(dataset)
@@ -98,3 +98,4 @@ def run_explanations_task(
         len(forecasts),
         prediction_id,
     )
+    return prediction_id

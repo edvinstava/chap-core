@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from sqlalchemy import create_engine
@@ -13,6 +15,7 @@ from chap_core.database.tables import Prediction, PredictionSamplesEntry
 from chap_core.database.xai_tables import PredictionExplanation
 from chap_core.rest_api.app import app
 from chap_core.rest_api.v1.routers.dependencies import get_session
+from chap_core.rest_api.v1.routers.xai import worker
 
 
 @pytest.fixture
@@ -266,3 +269,25 @@ def test_native_shap_dashed_period_normalized_at_storage(engine, client):
     )
     assert get_resp.status_code == 200, get_resp.text
     assert len(get_resp.json()) == 1
+
+
+def test_run_explanations_uses_prediction_name_and_method_in_job_name(
+    client, prediction_with_cached_global, monkeypatch
+):
+    captured: dict[str, Any] = {}
+
+    def _fake_queue_db(func, *args, **kwargs):
+        captured["func"] = func
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(id="job-123")
+
+    monkeypatch.setattr(worker, "queue_db", _fake_queue_db)
+    prediction_id = prediction_with_cached_global
+    response = client.post(
+        f"/v1/xai/predictions/{prediction_id}/explanations/run",
+        json={"xaiMethod": "shap_auto", "outputStatistic": "median", "topK": 5},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {"id": "job-123"}
+    assert captured["kwargs"]["__job_name__"] == "cached prediction shap_auto"

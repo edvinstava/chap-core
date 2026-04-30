@@ -97,9 +97,9 @@ def fit_surrogate_explainer(
 ) -> Any:
     from .lime_explainer import SurrogateLIMEExplainer
     from .model import auto_select_best_model_type
-    from .tuning import select_and_tune_best_model_type, tune_surrogate_hyperparameters
     from .preprocessing import filter_features
     from .shap_explainer import SurrogateSHAPExplainer
+    from .tuning import select_and_tune_best_model_type, tune_surrogate_hyperparameters
 
     if cache_key is not None:
         cached = get_cached_surrogate(cache_key)

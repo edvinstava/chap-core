@@ -88,8 +88,13 @@ def run_explanations(
     prediction_id: Annotated[int, Path(alias="predictionId")],
     request: RunExplanationsRequest,
     database_url: str = Depends(get_database_url),
+    session: Session = Depends(get_session),
 ):
     validate_xai_method_name(request.xai_method)
+    prediction = session.get(Prediction, prediction_id)
+    if prediction is None:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+    job_name = f"{prediction.name} {request.xai_method}"
     job = worker.queue_db(
         run_explanations_task,
         prediction_id,
@@ -97,7 +102,7 @@ def run_explanations(
         request.output_statistic,
         request.top_k,
         database_url=database_url,
-        **{JOB_TYPE_KW: "xai_explanations", JOB_NAME_KW: f"xai_{prediction_id}"},
+        **{JOB_TYPE_KW: "xai_explanations", JOB_NAME_KW: job_name},
     )
     return JobResponse(id=job.id)
 
