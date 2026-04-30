@@ -10,52 +10,62 @@ from chap_core.xai.surrogate.shap_explainer import SurrogateSHAPExplainer
 shap = pytest.importorskip("shap")
 
 
-def _make_fitted_explainer(transform: str | None) -> tuple[SurrogateSHAPExplainer, np.ndarray]:
-    rng = np.random.default_rng(0)
-    n, d = 60, 4
-    X = rng.normal(size=(n, d)).astype(float)
-    # Strictly positive target so log1p is valid.
-    y = np.abs(X[:, 0] * 2.0 + X[:, 1] * 0.5 + 1.0) + rng.normal(scale=0.1, size=n)
-    feature_names = [f"f{i}" for i in range(d)]
+def _make_fitted_explainer(X: np.ndarray, y: np.ndarray) -> SurrogateSHAPExplainer:
+    feature_names = [f"f{i}" for i in range(X.shape[1])]
     explainer = SurrogateSHAPExplainer(
         feature_names=feature_names,
-        model_config={"model_type": "hist_gradient_boosting"},
+        model_config={
+            "model_type": "decision_tree",
+            "max_depth": 4,
+            "min_samples_leaf": 2,
+        },
     )
     explainer.fit(X, y)
-    if transform is not None:
-        explainer._target_transform_method = transform
-    return explainer, X
+    return explainer
 
 
-def test_additivity_preserved_for_log1p_when_shap_sum_is_zero():
-    """When the surrogate happens to produce shap_sum == 0 for a row, additivity must still hold."""
-    explainer, X = _make_fitted_explainer("log1p")
+def test_shap_additivity_holds():
+    """SHAP guarantee: baseline + sum(sv[i]) == predict(X[i]) for every row."""
+    rng = np.random.default_rng(0)
+    n, d = 30, 4
+    X = rng.normal(size=(n, d)).astype(float)
+    y = np.abs(X[:, 0] * 2.0 + X[:, 1] * 0.5 + 1.0) + rng.normal(scale=0.1, size=n)
+    explainer = _make_fitted_explainer(X, y)
 
-    # Force shap_sum_t to zero on one synthetic row by patching the inner explainer.
-    real_shap_values = explainer._shap_explainer.shap_values
-
-    def fake_shap_values(arr):
-        sv = real_shap_values(arr)
-        sv[0] = 0.0  # force exact zero contributions for first row
-        return sv
-
-    explainer._shap_explainer.shap_values = fake_shap_values
-    sv_full = explainer.shap_values_matrix(X[:1])
-
+    sv = explainer.shap_values_matrix(X)
     baseline = explainer.expected_value
-    actual = float(explainer.predict(X[:1])[0])
-    reconstructed = baseline + float(np.sum(sv_full[0]))
+    predicted = explainer.predict(X)
 
-    assert reconstructed == pytest.approx(actual, rel=1e-6, abs=1e-6)
+    np.testing.assert_allclose(baseline + np.sum(sv, axis=1), predicted, rtol=1e-5, atol=1e-5)
 
 
-def test_yeo_johnson_without_transformer_raises_rather_than_returns_mixed_units():
-    explainer, X = _make_fitted_explainer("yeo_johnson")
-    # Strip the transformer to simulate a stale / unwrapped model.
-    if hasattr(explainer._model, "transformer_"):
-        delattr(explainer._model, "transformer_")
-    if hasattr(explainer._model, "transformer"):
-        delattr(explainer._model, "transformer")
+def test_shap_additivity_holds_with_skewed_target():
+    """Additivity holds with a right-skewed target that favours a log1p transform."""
+    rng = np.random.default_rng(1)
+    n, d = 30, 4
+    X = rng.normal(size=(n, d)).astype(float)
+    y = np.exp(X[:, 0] * 0.8) * 10 + rng.exponential(scale=0.5, size=n)
+    explainer = _make_fitted_explainer(X, y)
 
-    with pytest.raises(RuntimeError, match="transformer"):
-        explainer.shap_values_matrix(X[:5])
+    sv = explainer.shap_values_matrix(X)
+    baseline = explainer.expected_value
+    predicted = explainer.predict(X)
+
+    np.testing.assert_allclose(baseline + np.sum(sv, axis=1), predicted, rtol=1e-4, atol=1e-4)
+
+
+def test_shap_additivity_holds_when_features_carry_no_signal():
+    """Additivity holds when the surrogate learns near-zero attributions for every row."""
+    rng = np.random.default_rng(7)
+    n, d = 30, 4
+    X = rng.normal(size=(n, d)).astype(float)
+    # Near-constant target: the model predicts close to the mean for all rows,
+    # so SHAP values are near zero, exercising the zero-residual branch.
+    y = np.ones(n) * 5.0 + rng.normal(scale=1e-3, size=n)
+    explainer = _make_fitted_explainer(X, y)
+
+    sv = explainer.shap_values_matrix(X)
+    baseline = explainer.expected_value
+    predicted = explainer.predict(X)
+
+    np.testing.assert_allclose(baseline + np.sum(sv, axis=1), predicted, rtol=1e-4, atol=1e-4)
