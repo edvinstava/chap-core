@@ -9,8 +9,7 @@ from chap_core.rest_api.v1.xai_schemas import (
     HorizonSummaryResponse,
 )
 from chap_core.xai.forecast_utils import forecast_actual_value
-
-from .quality import quality_response_dict
+from chap_core.xai.responses.quality import quality_response_dict
 
 
 def horizon_summary_from_surrogate(

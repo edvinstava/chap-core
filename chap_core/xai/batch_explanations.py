@@ -1,11 +1,10 @@
 from chap_core.database.database import SessionWrapper
 from chap_core.database.tables import Prediction
-from chap_core.database.xai_tables import PredictionExplanation
 from chap_core.log_config import get_status_logger
 from chap_core.xai.forecast_utils import forecast_actual_value
 from chap_core.xai.method_registry import NATIVE_SHAP
 from chap_core.xai.responses.native_shap import has_native_shap
-from chap_core.xai.responses.quality import quality_response_dict
+from chap_core.xai.responses.stored_views import build_local_explanation_record
 from chap_core.xai.router_services import persist_global_entry, resolve_feature_names
 from chap_core.xai.surrogate.methods import METHOD_TO_MODEL_TYPE
 from chap_core.xai.surrogate.pipeline import build_surrogate_data, fit_surrogate_explainer
@@ -80,21 +79,16 @@ def run_explanations_task(
             actual_forecast_value=actual_value,
         )
 
-        explanation = PredictionExplanation(
+        explanation = build_local_explanation_record(
             prediction_id=prediction_id,
             org_unit=fc.org_unit,
-            period=fc.period,
-            method=xai_method_name,
+            canonical_period=fc.period,
+            xai_method=xai_method_name,
             output_statistic=output_statistic,
-            params={"top_k": top_k},
-            result={
-                "feature_attributions": [f.model_dump() for f in local_exp.feature_attributions],
-                "baseline_prediction": local_exp.baseline_prediction,
-                "actual_prediction": local_exp.actual_prediction,
-                "surrogate_quality": quality_response_dict(quality),
-                "covariate_provenance": covariate_provenance_rows[idx],
-            },
-            status="completed",
+            top_k=top_k,
+            local_exp=local_exp,
+            quality=quality,
+            covariate_provenance=covariate_provenance_rows[idx],
         )
         session.session.add(explanation)
 

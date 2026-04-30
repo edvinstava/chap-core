@@ -37,14 +37,14 @@ class LocalExplanationResponse(DBModel):
     feature_attributions: list[dict]
     baseline_prediction: float
     actual_prediction: float
-    computed_at: str | None = None
+    computed_at: datetime | None = None
     status: str = "completed"
     surrogate_quality: dict[str, Any] | None = None
     covariate_provenance: dict[str, Any] | None = None
 
 
 class RunExplanationsRequest(BaseModel):
-    xai_method: str = Field("shap_auto", alias="xaiMethodName")
+    xai_method: str = Field("shap_auto", alias="xaiMethod")
     output_statistic: str = Field("median", alias="outputStatistic")
     top_k: int = Field(10, alias="topK")
 

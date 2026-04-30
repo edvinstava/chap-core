@@ -13,8 +13,7 @@ from chap_core.rest_api.v1.xai_schemas import (
     ShapBeeswarmPoint,
     ShapBeeswarmResponse,
 )
-
-from .quality import quality_response_dict
+from chap_core.xai.responses.quality import quality_response_dict
 
 
 def explanation_to_response(exp: PredictionExplanation) -> LocalExplanationResponse:
@@ -29,7 +28,7 @@ def explanation_to_response(exp: PredictionExplanation) -> LocalExplanationRespo
         feature_attributions=result.get("feature_attributions", []),
         baseline_prediction=result.get("baseline_prediction", 0),
         actual_prediction=result.get("actual_prediction", 0),
-        computed_at=exp.created.isoformat() if exp.created else None,
+        computed_at=exp.created or None,
         status=exp.status,
         surrogate_quality=result.get("surrogate_quality"),
         covariate_provenance=result.get("covariate_provenance"),
@@ -77,7 +76,7 @@ def beeswarm_from_stored(
     for exp in explanations:
         result = exp.result or {}
         if quality is None:
-            quality = quality_response_dict(result.get("surrogate_quality"))
+            quality = result.get("surrogate_quality")
         for attr in result.get("feature_attributions", []):
             fname = attr.get("feature_name", "")
             if not fname:
@@ -118,7 +117,7 @@ def horizon_summary_from_stored(
     for step_num, exp in enumerate(stored_sorted, start=1):
         result = exp.result or {}
         if quality is None:
-            quality = quality_response_dict(result.get("surrogate_quality"))
+            quality = result.get("surrogate_quality")
         feat_imps: list[HorizonFeatureImportance] = []
         for attr in result.get("feature_attributions", []):
             fname = attr.get("feature_name", "")
