@@ -112,7 +112,7 @@ XAI_METHODS = [
         "supported_visualizations": ["importance"],
     },
     {
-        "id": 10,
+        "id": 9,
         "name": "native_shap",
         "display_name": "SHAP \u2014 Native (from model)",
         "description": (

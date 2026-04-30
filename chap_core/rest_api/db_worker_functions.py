@@ -25,6 +25,7 @@ from chap_core.rest_api.data_models import BackTestCreate, FetchRequest, Predict
 from chap_core.rest_api.worker_functions import WorkerConfig, harmonize_health_dataset
 from chap_core.spatio_temporal_data.temporal_dataclass import DataSet
 from chap_core.time_period import Month
+from chap_core.time_period.date_util_wrapper import TimePeriod
 from chap_core.xai.method_registry import NATIVE_SHAP
 
 logger = logging.getLogger(__name__)
@@ -211,10 +212,18 @@ def _store_native_shap_explanations(native_shap: dict, prediction_id: int, sessi
             }
             for i, fn in enumerate(feature_names)
         ]
+        raw_period = str(entry["time_period"])
+        parse_input = raw_period
+        if len(raw_period) == 7 and raw_period[4] == "-" and raw_period[5:].isdigit():
+            parse_input = raw_period[:4] + raw_period[5:]
+        try:
+            stored_period = str(TimePeriod.parse(parse_input).id)
+        except Exception:
+            stored_period = parse_input
         explanation = PredictionExplanation(
             prediction_id=prediction_id,
             org_unit=entry["location"],
-            period=entry["time_period"],
+            period=stored_period,
             method=NATIVE_SHAP,
             output_statistic="median",
             params={},

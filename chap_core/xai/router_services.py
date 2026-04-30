@@ -21,10 +21,7 @@ from chap_core.rest_api.v1.xai_schemas import (
 from chap_core.xai.forecast_matching import find_forecast_row_index
 from chap_core.xai.method_registry import NATIVE_SHAP, XAI_METHODS
 from chap_core.xai.responses.native_shap import (
-    list_filtered_native_shap_locals,
-    native_shap_beeswarm,
     native_shap_global_response,
-    native_shap_local_response,
 )
 from chap_core.xai.responses.native_shap_horizon import build_native_shap_horizon_summary
 from chap_core.xai.responses.quality import quality_response_dict
@@ -267,12 +264,7 @@ def compute_local_explanation_service(
     feature_names = resolve_feature_names(dataset)
 
     if request.xai_method == NATIVE_SHAP:
-        resp = native_shap_local_response(
-            prediction_id, request.org_unit, canonical_period, request.output_statistic, prediction
-        )
-        if resp is None:
-            raise HTTPException(status_code=404, detail="No native SHAP data for this prediction/period")
-        return resp
+        raise HTTPException(status_code=404, detail="No native SHAP data for this org_unit/period combination")
 
     surrogate_context = build_surrogate_context(
         prediction_id, all_forecasts, dataset, feature_names, request.output_statistic, request.xai_method
@@ -328,10 +320,7 @@ def compute_beeswarm_service(
     feature_names = resolve_feature_names(dataset)
 
     if xai_method == NATIVE_SHAP:
-        resp = native_shap_beeswarm(prediction_id, output_statistic, prediction, dataset)
-        if resp is None:
-            raise HTTPException(status_code=404, detail="No native SHAP data for this prediction")
-        return resp
+        raise HTTPException(status_code=404, detail="SHAP beeswarm not available for native SHAP predictions")
 
     surrogate_context = build_surrogate_context(
         prediction_id, forecasts, dataset, feature_names, output_statistic, xai_method
@@ -391,9 +380,8 @@ def normalize_list_period(
     forecasts: list[Any],
     org_unit: str | None,
     period: str,
-    xai_method: str | None,
 ) -> str:
-    if xai_method != NATIVE_SHAP and "_" in period and org_unit and forecasts:
+    if "_" in period and org_unit and forecasts:
         idx = find_forecast_row_index(forecasts, org_unit, period)
         if idx is not None:
             return str(forecasts[idx].period)
@@ -412,19 +400,12 @@ def fetch_local_explanations_service(
     if org_unit:
         query = query.where(PredictionExplanation.org_unit == org_unit)
     if period:
-        canonical_period = normalize_list_period(prediction.forecasts, org_unit, period, xai_method)
+        canonical_period = normalize_list_period(prediction.forecasts, org_unit, period)
         query = query.where(PredictionExplanation.period == canonical_period)
     if xai_method:
         query = query.where(PredictionExplanation.method == xai_method)
 
     explanations = session.exec(query).all()
-
-    if not explanations and xai_method == NATIVE_SHAP:
-        native_items = list_filtered_native_shap_locals(
-            prediction_id, prediction, org_unit, period, output_statistic="median"
-        )
-        if native_items:
-            return native_items
 
     return [explanation_to_response(exp) for exp in explanations]
 
@@ -437,11 +418,12 @@ def get_or_compute_local_explanation(
     canonical_period: str,
     request: LocalExplanationRequest,
 ) -> Any:
+    period_clause = PredictionExplanation.period == canonical_period
     existing = session.exec(
         select(PredictionExplanation).where(
             PredictionExplanation.prediction_id == prediction_id,
             PredictionExplanation.org_unit == request.org_unit,
-            PredictionExplanation.period == canonical_period,
+            period_clause,
             PredictionExplanation.method == request.xai_method,
         )
     ).first()

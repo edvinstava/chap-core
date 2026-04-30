@@ -101,16 +101,17 @@ def _parse_shap_csv(shap_file: Path) -> dict:
     periods = shap_df["time_period"].astype(str).to_numpy()
     expected_values = shap_df["expected_value"].astype(float).to_numpy()
 
-    values = [
+    values_df = pd.DataFrame(
         {
-            "location": str(locations[i]),
-            "time_period": str(periods[i]),
-            "shap_values": shap_matrix[i].tolist(),
-            "feature_values": dict(zip(feature_names, value_matrix[i].tolist(), strict=True)),
-            "expected_value": float(expected_values[i]),
+            "location": locations,
+            "time_period": periods,
+            "expected_value": expected_values,
         }
-        for i in range(len(shap_df))
-    ]
+    )
+    values_df["shap_values"] = shap_matrix.tolist()
+    feature_values_records = pd.DataFrame(value_matrix, columns=feature_names).to_dict("records")
+    values_df["feature_values"] = pd.Series(feature_values_records, dtype=object)
+    values = values_df.to_dict("records")
 
     global_expected = float(expected_values.mean()) if len(expected_values) else 0.0
     return {

@@ -44,7 +44,7 @@ class LocalExplanationResponse(DBModel):
 
 
 class RunExplanationsRequest(BaseModel):
-    xai_method: str = Field("shap_auto", alias="xaiMethod")
+    xai_method: str = Field("shap_auto", alias="xaiMethodName")
     output_statistic: str = Field("median", alias="outputStatistic")
     top_k: int = Field(10, alias="topK")
 

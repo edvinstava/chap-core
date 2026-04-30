@@ -9,7 +9,8 @@ from sqlalchemy import create_engine
 from sqlmodel import Session, SQLModel
 from starlette.testclient import TestClient
 
-from chap_core.database.tables import Prediction
+from chap_core.database.tables import Prediction, PredictionSamplesEntry
+from chap_core.database.xai_tables import PredictionExplanation
 from chap_core.rest_api.app import app
 from chap_core.rest_api.v1.routers.dependencies import get_session
 
@@ -81,3 +82,188 @@ def test_global_explanation_returns_cached_entry(client, prediction_with_cached_
     assert body["nSamples"] == 12
     assert body["stabilityScore"] == 0.9
     assert body["topFeatures"][0]["feature_name"] == "rainfall"
+
+
+@pytest.fixture
+def prediction_with_native_shap_local(engine):
+    """Prediction with a stored native_shap PredictionExplanation using the canonical
+    calendar period format (YYYYMM) as produced by _store_native_shap_explanations."""
+    with Session(engine) as session:
+        prediction = Prediction(
+            model_id="native_model",
+            model_db_id=1,
+            dataset_id=1,
+            n_periods=1,
+            name="native shap prediction",
+            created=datetime.datetime.now(),
+            meta_data={"xai": {"global_by_method": {"native_shap": {"topFeatures": [], "nSamples": 1}}}},
+        )
+        session.add(prediction)
+        session.flush()
+
+        forecast = PredictionSamplesEntry(
+            prediction_id=prediction.id,
+            period="202406",
+            org_unit="OU123",
+            values=[10.0],
+        )
+        session.add(forecast)
+
+        explanation = PredictionExplanation(
+            prediction_id=prediction.id,
+            org_unit="OU123",
+            period="202406",
+            method="native_shap",
+            output_statistic="median",
+            params={},
+            result={
+                "feature_attributions": [{"feature_name": "rainfall", "importance": 0.5}],
+                "baseline_prediction": 8.0,
+                "actual_prediction": 10.0,
+                "surrogate_quality": None,
+                "covariate_provenance": None,
+            },
+            status="completed",
+        )
+        session.add(explanation)
+        session.commit()
+        session.refresh(prediction)
+        return prediction.id
+
+
+def test_native_shap_local_explanation_resolved_by_stored_period(client, prediction_with_native_shap_local):
+    """POST /local with xaiMethod=native_shap must find the stored explanation using the
+    canonical calendar period even when the request sends step-notation (e.g. '202406_1')."""
+    prediction_id = prediction_with_native_shap_local
+    resp = client.post(
+        f"/v1/xai/predictions/{prediction_id}/local",
+        json={"orgUnit": "OU123", "period": "202406_1", "xaiMethod": "native_shap"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["method"] == "native_shap"
+    assert body["period"] == "202406"
+    assert body["orgUnit"] == "OU123"
+
+
+@pytest.fixture
+def prediction_with_native_shap_canonical_period(engine):
+    """Prediction where the model stored canonical calendar periods in shap_values.csv (e.g. '202407')
+    rather than step-notation (e.g. '202406_1'). The POST request still sends step-notation."""
+    with Session(engine) as session:
+        prediction = Prediction(
+            model_id="native_model_canonical",
+            model_db_id=1,
+            dataset_id=1,
+            n_periods=1,
+            name="native shap canonical period",
+            created=datetime.datetime.now(),
+            meta_data={"xai": {"global_by_method": {"native_shap": {"topFeatures": [], "nSamples": 1}}}},
+        )
+        session.add(prediction)
+        session.flush()
+
+        forecast = PredictionSamplesEntry(
+            prediction_id=prediction.id,
+            period="202407",
+            org_unit="OU123",
+            values=[10.0],
+        )
+        session.add(forecast)
+
+        explanation = PredictionExplanation(
+            prediction_id=prediction.id,
+            org_unit="OU123",
+            period="202407",
+            method="native_shap",
+            output_statistic="median",
+            params={},
+            result={
+                "feature_attributions": [{"feature_name": "rainfall", "importance": 0.5}],
+                "baseline_prediction": 8.0,
+                "actual_prediction": 10.0,
+                "surrogate_quality": None,
+                "covariate_provenance": None,
+            },
+            status="completed",
+        )
+        session.add(explanation)
+        session.commit()
+        session.refresh(prediction)
+        return prediction.id
+
+
+def test_native_shap_local_explanation_resolved_by_canonical_period(
+    client, prediction_with_native_shap_canonical_period
+):
+    """POST /local must also find stored native_shap explanations whose period is the canonical
+    calendar period (e.g. '202407') when the request sends step-notation (e.g. '202406_1')."""
+    prediction_id = prediction_with_native_shap_canonical_period
+    resp = client.post(
+        f"/v1/xai/predictions/{prediction_id}/local",
+        json={"orgUnit": "OU123", "period": "202406_1", "xaiMethod": "native_shap"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["method"] == "native_shap"
+    assert body["orgUnit"] == "OU123"
+
+
+def test_native_shap_dashed_period_normalized_at_storage(engine, client):
+    """_store_native_shap_explanations must normalize 'YYYY-MM' to 'YYYYMM' at storage
+    time so that GET/POST /local can find explanations with a plain equality query."""
+    from sqlmodel import select
+
+    from chap_core.database.database import SessionWrapper
+    from chap_core.rest_api.db_worker_functions import _store_native_shap_explanations
+
+    with Session(engine) as session:
+        prediction = Prediction(
+            model_id="chtorch_model",
+            model_db_id=1,
+            dataset_id=1,
+            n_periods=1,
+            name="native shap dashed period",
+            created=datetime.datetime.now(),
+            meta_data={"xai": {"global_by_method": {"native_shap": {"topFeatures": [], "nSamples": 1}}}},
+        )
+        session.add(prediction)
+        session.flush()
+        forecast = PredictionSamplesEntry(
+            prediction_id=prediction.id,
+            period="202407",
+            org_unit="OU123",
+            values=[10.0],
+        )
+        session.add(forecast)
+        session.commit()
+        prediction_id = prediction.id
+
+    native_shap = {
+        "feature_names": ["rainfall"],
+        "values": [
+            {
+                "time_period": "2024-07",
+                "location": "OU123",
+                "shap_values": [0.5],
+                "feature_values": {"rainfall": 1.5},
+                "expected_value": 8.0,
+            }
+        ],
+    }
+    with Session(engine) as session:
+        _store_native_shap_explanations(native_shap, prediction_id, SessionWrapper(session=session))
+
+    with Session(engine) as session:
+        exp = session.exec(
+            select(PredictionExplanation).where(PredictionExplanation.prediction_id == prediction_id)
+        ).first()
+        assert exp is not None
+        assert exp.period == "202407"
+
+    get_resp = client.get(
+        f"/v1/xai/predictions/{prediction_id}/local",
+        params={"orgUnit": "OU123", "period": "202407", "xaiMethod": "native_shap"},
+    )
+    assert get_resp.status_code == 200, get_resp.text
+    assert len(get_resp.json()) == 1
