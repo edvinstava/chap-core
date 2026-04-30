@@ -96,11 +96,8 @@ def fit_surrogate_explainer(
     cache_key: tuple | None = None,
 ) -> Any:
     from .lime_explainer import SurrogateLIMEExplainer
-    from .model import (
-        auto_select_best_model_type,
-        select_and_tune_best_model_type,
-        tune_surrogate_hyperparameters,
-    )
+    from .model import auto_select_best_model_type
+    from .tuning import select_and_tune_best_model_type, tune_surrogate_hyperparameters
     from .preprocessing import filter_features
     from .shap_explainer import SurrogateSHAPExplainer
 
