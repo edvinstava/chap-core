@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from ..types import (
-    ExplanationMethod,
     FeatureAttribution,
     GlobalExplanation,
     LocalExplanation,
@@ -181,7 +180,6 @@ class SurrogateSHAPExplainer(SurrogateExplainerBase):
         attributions.sort(key=lambda a: abs(a.importance), reverse=True)
 
         return GlobalExplanation(
-            method=ExplanationMethod.SHAP,
             top_features=attributions[:top_k],
             n_samples=len(X),
             stability_score=stability,
@@ -239,7 +237,6 @@ class SurrogateSHAPExplainer(SurrogateExplainerBase):
             prediction_id=prediction_id,
             org_unit=org_unit,
             period=period,
-            method=ExplanationMethod.SHAP,
             output_statistic=output_statistic,
             feature_attributions=attributions[:top_k],
             baseline_prediction=baseline,

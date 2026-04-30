@@ -8,7 +8,7 @@ from chap_core.rest_api.v1.xai_schemas import (
     HorizonStepSummary,
     HorizonSummaryResponse,
 )
-from chap_core.xai.router_services import forecast_actual_value
+from chap_core.xai.forecast_utils import forecast_actual_value
 
 from .quality import quality_response_dict
 

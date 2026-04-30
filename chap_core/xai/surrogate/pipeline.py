@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -10,6 +11,16 @@ from ..method_registry import LIME_AUTO
 from .cache import get_cached_surrogate, put_cached_surrogate
 
 logger = logging.getLogger(__name__)
+
+MIN_SAMPLES_FOR_TUNING = 15
+
+
+@dataclass
+class SurrogateContext:
+    X: np.ndarray
+    feature_names: list[str]
+    explainer: Any
+    covariate_provenance_rows: list[dict[str, Any]] | None = None
 
 
 def build_surrogate_data(
@@ -92,8 +103,6 @@ def fit_surrogate_explainer(
     )
     from .preprocessing import filter_features
     from .shap_explainer import SurrogateSHAPExplainer
-
-    MIN_SAMPLES_FOR_TUNING = 15
 
     if cache_key is not None:
         cached = get_cached_surrogate(cache_key)

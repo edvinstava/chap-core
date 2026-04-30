@@ -2,10 +2,11 @@ from chap_core.database.database import SessionWrapper
 from chap_core.database.tables import Prediction
 from chap_core.database.xai_tables import PredictionExplanation
 from chap_core.log_config import get_status_logger
+from chap_core.xai.forecast_utils import forecast_actual_value
 from chap_core.xai.method_registry import NATIVE_SHAP
 from chap_core.xai.responses.native_shap import has_native_shap
 from chap_core.xai.responses.quality import quality_response_dict
-from chap_core.xai.router_services import forecast_actual_value, persist_global_entry, resolve_feature_names
+from chap_core.xai.router_services import persist_global_entry, resolve_feature_names
 from chap_core.xai.surrogate.methods import METHOD_TO_MODEL_TYPE
 from chap_core.xai.surrogate.pipeline import build_surrogate_data, fit_surrogate_explainer
 

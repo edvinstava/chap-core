@@ -1,8 +1,6 @@
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-import numpy as np
 from fastapi import HTTPException
 from sqlalchemy.orm.attributes import flag_modified
 from sqlmodel import Session, select
@@ -19,6 +17,7 @@ from chap_core.rest_api.v1.xai_schemas import (
     ShapBeeswarmResponse,
 )
 from chap_core.xai.forecast_matching import find_forecast_row_index
+from chap_core.xai.forecast_utils import forecast_actual_value
 from chap_core.xai.method_registry import NATIVE_SHAP, XAI_METHODS
 from chap_core.xai.responses.native_shap import (
     native_shap_global_response,
@@ -31,19 +30,12 @@ from chap_core.xai.responses.stored_views import (
     explanation_to_response,
     horizon_summary_from_stored,
 )
+from chap_core.xai.responses.surrogate_horizon import horizon_summary_from_surrogate
 from chap_core.xai.surrogate.methods import METHOD_TO_MODEL_TYPE
-from chap_core.xai.surrogate.pipeline import build_surrogate_data, fit_surrogate_explainer
+from chap_core.xai.surrogate.pipeline import SurrogateContext, build_surrogate_data, fit_surrogate_explainer
 
 _XAI_METHOD_DEFINITIONS_BY_NAME = {method["name"]: method for method in XAI_METHODS}
 _NON_FEATURE_FIELDS = {"time_period", "period", "date", "location"}
-
-
-@dataclass
-class SurrogateContext:
-    X: np.ndarray
-    feature_names: list[str]
-    explainer: Any
-    covariate_provenance_rows: list[dict[str, Any]] | None = None
 
 
 def resolve_feature_names(dataset: Any) -> list[str]:
@@ -153,19 +145,6 @@ def build_surrogate_context(
         explainer=explainer,
         covariate_provenance_rows=covariate_provenance_rows,
     )
-
-
-def forecast_actual_value(values: list[float], output_statistic: str) -> float:
-    samples = np.array(values, dtype=float)
-    if output_statistic == "mean":
-        return float(np.mean(samples))
-    if output_statistic.startswith("q"):
-        try:
-            q = float(output_statistic[1:]) / 100.0
-        except ValueError:
-            q = 0.5
-        return float(np.quantile(samples, q))
-    return float(np.median(samples))
 
 
 def build_surrogate_beeswarm_response(
@@ -336,8 +315,6 @@ def compute_horizon_summary_service(
     output_statistic: str,
     xai_method: str,
 ) -> HorizonSummaryResponse:
-    from chap_core.xai.responses.surrogate_horizon import horizon_summary_from_surrogate
-
     forecasts = prediction.forecasts
 
     if xai_method == NATIVE_SHAP:

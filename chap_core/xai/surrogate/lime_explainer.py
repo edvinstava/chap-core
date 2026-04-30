@@ -3,7 +3,7 @@ from typing import Any
 
 import numpy as np
 
-from ..types import ExplanationMethod, FeatureAttribution, GlobalExplanation, LocalExplanation
+from ..types import FeatureAttribution, GlobalExplanation, LocalExplanation
 from .base import SurrogateExplainerBase
 
 logger = logging.getLogger(__name__)
@@ -103,7 +103,6 @@ class SurrogateLIMEExplainer(SurrogateExplainerBase):
         attributions.sort(key=lambda a: abs(a.importance), reverse=True)
 
         return GlobalExplanation(
-            method=ExplanationMethod.LIME,
             top_features=attributions[:top_k],
             n_samples=len(indices),
         )
@@ -193,7 +192,6 @@ class SurrogateLIMEExplainer(SurrogateExplainerBase):
             prediction_id=prediction_id,
             org_unit=org_unit,
             period=period,
-            method=ExplanationMethod.LIME,
             output_statistic=output_statistic,
             feature_attributions=attributions[:top_k],
             baseline_prediction=baseline,
