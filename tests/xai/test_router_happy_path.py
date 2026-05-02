@@ -83,7 +83,7 @@ def test_global_explanation_returns_cached_entry(client, prediction_with_cached_
     assert body["method"] == "shap_auto"
     assert body["nSamples"] == 12
     assert body["stabilityScore"] == 0.9
-    assert body["topFeatures"][0]["feature_name"] == "rainfall"
+    assert body["topFeatures"][0]["featureName"] == "rainfall"
 
 
 @pytest.fixture

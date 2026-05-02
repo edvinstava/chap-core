@@ -4,17 +4,17 @@ Data types for XAI explanations.
 
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+from chap_core.database.base_tables import DBModel
 
 
-class FeatureAttribution(BaseModel):
+class FeatureAttribution(DBModel):
     feature_name: str
     importance: float
     direction: str | None = None
     baseline_value: float | None = None
     actual_value: float | None = None
-
-    model_config = ConfigDict(populate_by_name=True)
 
 
 class GlobalExplanation(BaseModel):
