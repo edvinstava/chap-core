@@ -253,8 +253,8 @@ def celery_run_with_session(func, *args, **kwargs):
 
 JOB_TYPE_KW = "__job_type__"
 JOB_NAME_KW = "__job_name__"
-JOB_PREDICTION_ID_KW = "__job_prediction_id__"
-JOB_XAI_METHOD_KW = "__job_xai_method__"
+JOB_PREDICTION_ID_KW = "__prediction_id__"
+JOB_XAI_METHOD_KW = "__xai_method__"
 
 
 class CeleryJob[ReturnType]:
