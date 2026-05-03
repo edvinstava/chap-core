@@ -96,7 +96,6 @@ def global_response_from_entry(xai_method: str, entry: dict[str, Any]) -> Global
         computed_at=datetime.fromisoformat(computed_at_str) if computed_at_str else None,
         n_samples=entry.get("nSamples", 0),
         stability_score=entry.get("stabilityScore"),
-        available=True,
         surrogate_quality=entry.get("surrogateQuality"),
     )
 
@@ -235,7 +234,6 @@ def compute_global_explanation_service(
         computed_at=global_exp.computed_at,
         n_samples=global_exp.n_samples,
         stability_score=global_exp.stability_score,
-        available=True,
         surrogate_quality=quality_response_dict(quality),
     )
 
@@ -506,6 +504,7 @@ def build_xai_method_read(definition: dict[str, Any]) -> XaiMethodRead:
     return XaiMethodRead(
         **definition,
         method_type_label=METHOD_TYPE_LABELS.get(method_type, method_type),
+        is_native=method_type == "native_shap",
         supported_visualization_labels=[VISUALIZATION_LABELS.get(v, v) for v in visualizations],
     )
 

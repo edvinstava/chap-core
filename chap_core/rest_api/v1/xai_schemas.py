@@ -59,7 +59,6 @@ class GlobalExplanationResponse(DBModel):
     computed_at: datetime | None = None
     n_samples: int = 0
     stability_score: float | None = None
-    available: bool = True
     surrogate_quality: SurrogateQualityRead | None = None
 
 
@@ -112,7 +111,6 @@ class ShapBeeswarmResponse(DBModel):
     feature_names: list[str]
     points: list[ShapBeeswarmPoint]
     surrogate_quality: SurrogateQualityRead | None = None
-    available: bool = True
 
 
 class HorizonFeatureImportance(DBModel):
@@ -144,7 +142,6 @@ class HorizonSummaryResponse(DBModel):
     steps: list[HorizonStepSummary]
     average_importance: list[AverageImportance]
     surrogate_quality: SurrogateQualityRead | None = None
-    available: bool = True
 
 
 class XaiMethodRead(DBModel):
@@ -158,6 +155,7 @@ class XaiMethodRead(DBModel):
     author: str
     archived: bool
     is_auto: bool = False
+    is_native: bool = False
     supported_visualizations: list[str]
     supported_visualization_labels: list[str]
     default_visualization: str

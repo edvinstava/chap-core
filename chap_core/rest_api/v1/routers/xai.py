@@ -7,7 +7,7 @@ Provides endpoints for retrieving and computing explanations for predictions.
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from sqlmodel import Session
 
 from chap_core.database.tables import Prediction
@@ -125,28 +125,23 @@ def run_explanations(
     "/predictions/{predictionId}/global",
     response_model=GlobalExplanationResponse,
     response_model_by_alias=True,
+    responses={204: {"description": "No global explanation cached for this prediction and method"}},
     tags=["XAI"],
 )
 def get_global_explanation(
     prediction_id: Annotated[int, Path(alias="predictionId")],
-    xai_method: str | None = Query(None, alias="xaiMethod"),
+    xai_method: str = Query(..., alias="xaiMethod"),
     session: Session = Depends(get_session),
 ):
     prediction = session.get(Prediction, prediction_id)
     if prediction is None:
         raise HTTPException(status_code=404, detail="Prediction not found")
 
-    meta = prediction.meta_data or {}
-
-    if xai_method:
-        entry = load_global_entry(meta, xai_method)
-        if entry:
-            return global_response_from_entry(xai_method, entry)
-
-    if xai_method is None:
-        return GlobalExplanationResponse(method="none", top_features=[], available=False, n_samples=0)
     validate_xai_method_name(xai_method)
-    return GlobalExplanationResponse(method=xai_method, top_features=[], available=False, n_samples=0)
+    entry = load_global_entry(prediction.meta_data or {}, xai_method)
+    if entry:
+        return global_response_from_entry(xai_method, entry)
+    return Response(status_code=204)
 
 
 @router.post(
@@ -237,6 +232,7 @@ def compute_local_explanation(
     "/predictions/{predictionId}/shap-beeswarm",
     response_model=ShapBeeswarmResponse,
     response_model_by_alias=True,
+    responses={204: {"description": "No SHAP beeswarm cached for this prediction and method"}},
     tags=["XAI"],
 )
 def get_shap_beeswarm(
@@ -252,13 +248,7 @@ def get_shap_beeswarm(
     cached = read_beeswarm(session, prediction_id, output_statistic, xai_method)
     if cached is not None:
         return cached
-    return ShapBeeswarmResponse(
-        prediction_id=prediction_id,
-        output_statistic=output_statistic,
-        feature_names=[],
-        points=[],
-        available=False,
-    )
+    return Response(status_code=204)
 
 
 @router.post(
@@ -290,6 +280,7 @@ def compute_shap_beeswarm(
     "/predictions/{predictionId}/local/horizon-summary",
     response_model=HorizonSummaryResponse,
     response_model_by_alias=True,
+    responses={204: {"description": "No horizon summary cached for this prediction and method"}},
     tags=["XAI"],
 )
 def get_horizon_summary(
@@ -306,15 +297,7 @@ def get_horizon_summary(
     cached = read_horizon_summary(session, prediction_id, org_unit, output_statistic, xai_method)
     if cached is not None:
         return cached
-    return HorizonSummaryResponse(
-        prediction_id=prediction_id,
-        org_unit=org_unit,
-        method=xai_method,
-        output_statistic=output_statistic,
-        steps=[],
-        average_importance=[],
-        available=False,
-    )
+    return Response(status_code=204)
 
 
 @router.post(

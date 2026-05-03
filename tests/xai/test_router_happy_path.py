@@ -79,12 +79,10 @@ def test_global_explanation_returns_cached_entry(client, prediction_with_cached_
     resp = client.get(f"/v1/xai/predictions/{prediction_id}/global", params={"xaiMethod": "shap_auto"})
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["available"] is True
     assert body["method"] == "shap_auto"
     assert body["nSamples"] == 12
     assert body["stabilityScore"] == 0.9
     assert body["topFeatures"][0]["featureName"] == "rainfall"
-
 
 @pytest.fixture
 def prediction_with_native_shap_local(engine):
@@ -291,3 +289,5 @@ def test_run_explanations_uses_prediction_name_and_method_in_job_name(
     assert response.status_code == 200, response.text
     assert response.json() == {"id": "job-123"}
     assert captured["kwargs"]["__job_name__"] == "cached prediction shap_auto"
+    assert captured["kwargs"]["__prediction_id__"] == prediction_id
+    assert captured["kwargs"]["__xai_method__"] == "shap_auto"

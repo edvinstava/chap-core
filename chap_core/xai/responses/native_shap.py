@@ -21,6 +21,5 @@ def native_shap_global_response(
         computed_at=entry.get("computedAt"),
         n_samples=entry.get("nSamples", 0),
         stability_score=entry.get("stabilityScore"),
-        available=True,
         surrogate_quality=None,
     )
