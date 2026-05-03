@@ -84,6 +84,7 @@ def test_global_explanation_returns_cached_entry(client, prediction_with_cached_
     assert body["stabilityScore"] == 0.9
     assert body["topFeatures"][0]["featureName"] == "rainfall"
 
+
 @pytest.fixture
 def prediction_with_native_shap_local(engine):
     """Prediction with a stored native_shap PredictionExplanation using the canonical
