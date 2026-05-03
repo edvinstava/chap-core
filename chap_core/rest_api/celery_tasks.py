@@ -54,6 +54,8 @@ class JobDescription(BaseModel):
     start_time: str | None
     end_time: str | None
     result: str | None
+    predictionId: int | None = None
+    xaiMethod: str | None = None
 
 
 def read_environment_variables():
@@ -151,17 +153,21 @@ class TrackedTask(Task):
         # print('apply async', args, kwargs, options)
         job_name = kwargs.pop(JOB_NAME_KW, None) or "Unnamed"
         job_type = kwargs.pop(JOB_TYPE_KW, None) or "Unspecified"
+        prediction_id = kwargs.pop(JOB_PREDICTION_ID_KW, None)
+        xai_method = kwargs.pop(JOB_XAI_METHOD_KW, None)
         result = super().apply_async(args=args, kwargs=kwargs, **options)
 
-        r.hset(
-            f"job_meta:{result.id}",
-            mapping={
-                "job_name": job_name,
-                "job_type": job_type,
-                "status": "PENDING",
-                "start_time": datetime.now().isoformat(),
-            },
-        )
+        mapping: dict[str, str] = {
+            "job_name": job_name,
+            "job_type": job_type,
+            "status": "PENDING",
+            "start_time": datetime.now().isoformat(),
+        }
+        if prediction_id is not None:
+            mapping["prediction_id"] = str(prediction_id)
+        if xai_method is not None:
+            mapping["xai_method"] = xai_method
+        r.hset(f"job_meta:{result.id}", mapping=mapping)
 
         return result
 

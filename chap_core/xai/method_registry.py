@@ -16,6 +16,7 @@ XAI_METHODS = [
         "method_type": "surrogate_shap_auto",
         "author": "CHAP",
         "archived": False,
+        "is_auto": True,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
     },
     {
@@ -30,6 +31,7 @@ XAI_METHODS = [
         "method_type": "surrogate_shap",
         "author": "CHAP",
         "archived": False,
+        "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
     },
     {
@@ -43,6 +45,7 @@ XAI_METHODS = [
         "method_type": "surrogate_shap",
         "author": "CHAP",
         "archived": False,
+        "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
     },
     {
@@ -56,6 +59,7 @@ XAI_METHODS = [
         "method_type": "surrogate_shap",
         "author": "CHAP",
         "archived": False,
+        "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
     },
     {
@@ -69,6 +73,7 @@ XAI_METHODS = [
         "method_type": "surrogate_shap",
         "author": "CHAP",
         "archived": False,
+        "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
     },
     {
@@ -82,6 +87,7 @@ XAI_METHODS = [
         "method_type": "surrogate_shap",
         "author": "CHAP",
         "archived": False,
+        "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
     },
     {
@@ -96,6 +102,7 @@ XAI_METHODS = [
         "method_type": "surrogate_shap",
         "author": "CHAP",
         "archived": False,
+        "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
     },
     {
@@ -109,6 +116,7 @@ XAI_METHODS = [
         "method_type": "surrogate_lime_auto",
         "author": "CHAP",
         "archived": False,
+        "is_auto": True,
         "supported_visualizations": ["importance"],
     },
     {
@@ -123,6 +131,7 @@ XAI_METHODS = [
         "method_type": "native_shap",
         "author": "Model",
         "archived": False,
+        "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
     },
 ]

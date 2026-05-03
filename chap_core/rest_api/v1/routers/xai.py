@@ -12,7 +12,13 @@ from sqlmodel import Session
 
 from chap_core.database.tables import Prediction
 from chap_core.database.xai_tables import PredictionExplanation
-from chap_core.rest_api.celery_tasks import JOB_NAME_KW, JOB_TYPE_KW, CeleryPool
+from chap_core.rest_api.celery_tasks import (
+    JOB_NAME_KW,
+    JOB_PREDICTION_ID_KW,
+    JOB_TYPE_KW,
+    JOB_XAI_METHOD_KW,
+    CeleryPool,
+)
 from chap_core.rest_api.data_models import JobResponse
 from chap_core.rest_api.v1.xai_schemas import (
     GlobalExplanationResponse,
@@ -102,7 +108,12 @@ def run_explanations(
         request.output_statistic,
         request.top_k,
         database_url=database_url,
-        **{JOB_TYPE_KW: "xai_explanations", JOB_NAME_KW: job_name},
+        **{
+            JOB_TYPE_KW: "xai_explanations",
+            JOB_NAME_KW: job_name,
+            JOB_PREDICTION_ID_KW: prediction_id,
+            JOB_XAI_METHOD_KW: request.xai_method,
+        },
     )
     return JobResponse(id=job.id)
 
