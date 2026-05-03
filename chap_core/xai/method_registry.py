@@ -2,6 +2,21 @@ NATIVE_SHAP = "native_shap"
 SHAP_AUTO = "shap_auto"
 LIME_AUTO = "lime_auto"
 
+
+METHOD_TYPE_LABELS: dict[str, str] = {
+    "surrogate_shap_auto": "Auto-tuned SHAP",
+    "surrogate_shap": "Surrogate SHAP",
+    "surrogate_lime_auto": "Auto-tuned LIME",
+    "native_shap": "Native SHAP",
+}
+
+VISUALIZATION_LABELS: dict[str, str] = {
+    "importance": "Feature importance",
+    "waterfall": "Waterfall",
+    "beeswarm": "Beeswarm",
+}
+
+
 XAI_METHODS = [
     {
         "id": 1,
@@ -18,6 +33,7 @@ XAI_METHODS = [
         "archived": False,
         "is_auto": True,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
+        "default_visualization": "waterfall",
     },
     {
         "id": 2,
@@ -33,6 +49,7 @@ XAI_METHODS = [
         "archived": False,
         "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
+        "default_visualization": "waterfall",
     },
     {
         "id": 3,
@@ -47,6 +64,7 @@ XAI_METHODS = [
         "archived": False,
         "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
+        "default_visualization": "waterfall",
     },
     {
         "id": 4,
@@ -61,6 +79,7 @@ XAI_METHODS = [
         "archived": False,
         "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
+        "default_visualization": "waterfall",
     },
     {
         "id": 5,
@@ -75,6 +94,7 @@ XAI_METHODS = [
         "archived": False,
         "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
+        "default_visualization": "waterfall",
     },
     {
         "id": 6,
@@ -89,6 +109,7 @@ XAI_METHODS = [
         "archived": False,
         "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
+        "default_visualization": "waterfall",
     },
     {
         "id": 7,
@@ -104,6 +125,7 @@ XAI_METHODS = [
         "archived": False,
         "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
+        "default_visualization": "waterfall",
     },
     {
         "id": 8,
@@ -118,6 +140,7 @@ XAI_METHODS = [
         "archived": False,
         "is_auto": True,
         "supported_visualizations": ["importance"],
+        "default_visualization": "importance",
     },
     {
         "id": 9,
@@ -133,5 +156,6 @@ XAI_METHODS = [
         "archived": False,
         "is_auto": False,
         "supported_visualizations": ["importance", "waterfall", "beeswarm"],
+        "default_visualization": "waterfall",
     },
 ]

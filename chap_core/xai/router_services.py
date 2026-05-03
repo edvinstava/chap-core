@@ -15,10 +15,16 @@ from chap_core.rest_api.v1.xai_schemas import (
     LocalExplanationResponse,
     ShapBeeswarmPoint,
     ShapBeeswarmResponse,
+    XaiMethodRead,
 )
 from chap_core.xai.forecast_matching import find_forecast_row_index
 from chap_core.xai.forecast_utils import forecast_actual_value
-from chap_core.xai.method_registry import NATIVE_SHAP, XAI_METHODS
+from chap_core.xai.method_registry import (
+    METHOD_TYPE_LABELS,
+    NATIVE_SHAP,
+    VISUALIZATION_LABELS,
+    XAI_METHODS,
+)
 from chap_core.xai.responses.native_shap import (
     native_shap_global_response,
 )
@@ -429,13 +435,12 @@ def get_or_compute_local_explanation(
     )
 
 
-def get_or_compute_beeswarm(
+def read_beeswarm(
     session: Session,
-    prediction: Prediction,
     prediction_id: int,
     output_statistic: str,
     xai_method: str,
-) -> ShapBeeswarmResponse:
+) -> ShapBeeswarmResponse | None:
     stored_query = select(PredictionExplanation).where(
         PredictionExplanation.prediction_id == prediction_id,
         PredictionExplanation.method == xai_method,
@@ -443,9 +448,42 @@ def get_or_compute_beeswarm(
     if xai_method != NATIVE_SHAP:
         stored_query = stored_query.where(PredictionExplanation.output_statistic == output_statistic)
     stored = session.exec(stored_query).all()
-    if stored:
-        return beeswarm_from_stored(prediction_id, output_statistic, stored)
+    if not stored:
+        return None
+    return beeswarm_from_stored(prediction_id, output_statistic, stored)
+
+
+def get_or_compute_beeswarm(
+    session: Session,
+    prediction: Prediction,
+    prediction_id: int,
+    output_statistic: str,
+    xai_method: str,
+) -> ShapBeeswarmResponse:
+    cached = read_beeswarm(session, prediction_id, output_statistic, xai_method)
+    if cached is not None:
+        return cached
     return compute_beeswarm_service(session, prediction, prediction_id, output_statistic, xai_method)
+
+
+def read_horizon_summary(
+    session: Session,
+    prediction_id: int,
+    org_unit: str,
+    output_statistic: str,
+    xai_method: str,
+) -> HorizonSummaryResponse | None:
+    stored_query = select(PredictionExplanation).where(
+        PredictionExplanation.prediction_id == prediction_id,
+        PredictionExplanation.org_unit == org_unit,
+        PredictionExplanation.method == xai_method,
+    )
+    if xai_method != NATIVE_SHAP:
+        stored_query = stored_query.where(PredictionExplanation.output_statistic == output_statistic)
+    stored = session.exec(stored_query).all()
+    if not stored:
+        return None
+    return horizon_summary_from_stored(prediction_id, org_unit, xai_method, output_statistic, stored)
 
 
 def get_or_compute_horizon_summary(
@@ -456,17 +494,20 @@ def get_or_compute_horizon_summary(
     output_statistic: str,
     xai_method: str,
 ) -> HorizonSummaryResponse:
-    stored_query = select(PredictionExplanation).where(
-        PredictionExplanation.prediction_id == prediction_id,
-        PredictionExplanation.org_unit == org_unit,
-        PredictionExplanation.method == xai_method,
-    )
-    if xai_method != NATIVE_SHAP:
-        stored_query = stored_query.where(PredictionExplanation.output_statistic == output_statistic)
-    stored = session.exec(stored_query).all()
-    if stored:
-        return horizon_summary_from_stored(prediction_id, org_unit, xai_method, output_statistic, stored)
+    cached = read_horizon_summary(session, prediction_id, org_unit, output_statistic, xai_method)
+    if cached is not None:
+        return cached
     return compute_horizon_summary_service(session, prediction, prediction_id, org_unit, output_statistic, xai_method)
+
+
+def build_xai_method_read(definition: dict[str, Any]) -> XaiMethodRead:
+    method_type = definition["method_type"]
+    visualizations = definition["supported_visualizations"]
+    return XaiMethodRead(
+        **definition,
+        method_type_label=METHOD_TYPE_LABELS.get(method_type, method_type),
+        supported_visualization_labels=[VISUALIZATION_LABELS.get(v, v) for v in visualizations],
+    )
 
 
 def get_or_compute_global_explanation(

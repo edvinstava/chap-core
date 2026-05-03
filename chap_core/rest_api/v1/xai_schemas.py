@@ -43,7 +43,7 @@ class SurrogateQualityRead(DBModel):
     selected_model_type: str | None = None
     selected_model_display_name: str | None = None
     n_groups: int | None = None
-    fidelity_tier: str | None = None
+    fidelity_tier: Literal["good", "moderate", "poor"] | None = None
     residual_mean: float | None = None
     residual_std: float | None = None
     target_transformed: bool = False
@@ -112,6 +112,7 @@ class ShapBeeswarmResponse(DBModel):
     feature_names: list[str]
     points: list[ShapBeeswarmPoint]
     surrogate_quality: SurrogateQualityRead | None = None
+    available: bool = True
 
 
 class HorizonFeatureImportance(DBModel):
@@ -143,6 +144,7 @@ class HorizonSummaryResponse(DBModel):
     steps: list[HorizonStepSummary]
     average_importance: list[AverageImportance]
     surrogate_quality: SurrogateQualityRead | None = None
+    available: bool = True
 
 
 class XaiMethodRead(DBModel):
@@ -151,8 +153,11 @@ class XaiMethodRead(DBModel):
     display_name: str
     description: str
     method_type: str
+    method_type_label: str
     source_url: str | None = None
     author: str
     archived: bool
     is_auto: bool = False
     supported_visualizations: list[str]
+    supported_visualization_labels: list[str]
+    default_visualization: str

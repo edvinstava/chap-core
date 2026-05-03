@@ -35,6 +35,7 @@ from chap_core.xai.method_registry import XAI_METHODS as XAI_METHOD_DEFINITIONS
 from chap_core.xai.responses.native_shap import has_native_shap
 from chap_core.xai.responses.stored_views import explanation_to_response
 from chap_core.xai.router_services import (
+    build_xai_method_read,
     fetch_local_explanations_service,
     get_or_compute_beeswarm,
     get_or_compute_global_explanation,
@@ -42,6 +43,8 @@ from chap_core.xai.router_services import (
     get_or_compute_local_explanation,
     global_response_from_entry,
     load_global_entry,
+    read_beeswarm,
+    read_horizon_summary,
     resolve_canonical_period,
     validate_xai_method_name,
 )
@@ -53,7 +56,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/xai")
 worker: CeleryPool[Any] = CeleryPool()
 
-_XAI_METHODS = [XaiMethodRead(**definition) for definition in XAI_METHOD_DEFINITIONS]
+_XAI_METHODS = [build_xai_method_read(definition) for definition in XAI_METHOD_DEFINITIONS]
 
 
 def _require_xai_method(xai_method: str = Query(SHAP_AUTO, alias="xaiMethod")) -> str:
@@ -81,7 +84,7 @@ def list_xai_methods(
 @router.get("/methods/{name}", response_model=XaiMethodRead, response_model_by_alias=True, tags=["XAI"])
 def get_xai_method(name: str):
     method = validate_xai_method_name(name, allow_archived=True)
-    return XaiMethodRead(**method)
+    return build_xai_method_read(method)
 
 
 @router.post(
@@ -230,6 +233,34 @@ def compute_local_explanation(
         raise HTTPException(status_code=500, detail="Error computing local explanation") from e
 
 
+@router.get(
+    "/predictions/{predictionId}/shap-beeswarm",
+    response_model=ShapBeeswarmResponse,
+    response_model_by_alias=True,
+    tags=["XAI"],
+)
+def get_shap_beeswarm(
+    prediction_id: Annotated[int, Path(alias="predictionId")],
+    output_statistic: str = Query("median", alias="outputStatistic"),
+    xai_method: str = Depends(_require_xai_method),
+    session: Session = Depends(get_session),
+):
+    prediction = session.get(Prediction, prediction_id)
+    if prediction is None:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+
+    cached = read_beeswarm(session, prediction_id, output_statistic, xai_method)
+    if cached is not None:
+        return cached
+    return ShapBeeswarmResponse(
+        prediction_id=prediction_id,
+        output_statistic=output_statistic,
+        feature_names=[],
+        points=[],
+        available=False,
+    )
+
+
 @router.post(
     "/predictions/{predictionId}/shap-beeswarm",
     response_model=ShapBeeswarmResponse,
@@ -253,6 +284,37 @@ def compute_shap_beeswarm(
     except Exception as e:
         logger.exception("Error computing SHAP beeswarm: %s", e)
         raise HTTPException(status_code=500, detail="Error computing beeswarm") from e
+
+
+@router.get(
+    "/predictions/{predictionId}/local/horizon-summary",
+    response_model=HorizonSummaryResponse,
+    response_model_by_alias=True,
+    tags=["XAI"],
+)
+def get_horizon_summary(
+    prediction_id: Annotated[int, Path(alias="predictionId")],
+    org_unit: str = Query(..., alias="orgUnit"),
+    output_statistic: str = Query("median", alias="outputStatistic"),
+    xai_method: str = Depends(_require_xai_method),
+    session: Session = Depends(get_session),
+):
+    prediction = session.get(Prediction, prediction_id)
+    if prediction is None:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+
+    cached = read_horizon_summary(session, prediction_id, org_unit, output_statistic, xai_method)
+    if cached is not None:
+        return cached
+    return HorizonSummaryResponse(
+        prediction_id=prediction_id,
+        org_unit=org_unit,
+        method=xai_method,
+        output_statistic=output_statistic,
+        steps=[],
+        average_importance=[],
+        available=False,
+    )
 
 
 @router.post(
